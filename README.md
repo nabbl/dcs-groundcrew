@@ -45,6 +45,23 @@ dotnet run
 
 ## Windows deployment
 
+### MSI installer
+
+Every push to `main`, pull request, and manual workflow run builds a Windows x64 MSI in GitHub Actions. Open the workflow run named **Build Windows installer** and download the `groundcrew-windows-installer-*` artifact.
+
+The MSI:
+
+- installs Groundcrew under `C:\Program Files\Groundcrew`
+- registers and starts the `DcsGroundcrew` Windows service
+- adds an **Open Groundcrew** Start Menu shortcut
+- listens on `http://127.0.0.1:5080` and, when Tailscale is active, its Tailscale IPv4 address on port 5080
+- limits the inbound firewall exception to Tailscale peers (`100.64.0.0/10`)
+- stores the SQLite database under `C:\ProgramData\Groundcrew` so upgrades preserve the configuration
+
+The generated MSI is currently unsigned, so Windows may display an unknown-publisher warning. Production signing can be added once a code-signing certificate is available.
+
+### Manual service deployment
+
 Run PowerShell as Administrator on the DCS host:
 
 ```powershell

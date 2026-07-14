@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:firewall="http://wixtoolset.org/schemas/v4/wxs/firewall"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+  <Package
+    Id="nabbl.DcsGroundcrew"
+    Name="Groundcrew"
+    Manufacturer="nabbl"
+    Version="$(Version)"
+    Scope="perMachine"
+    Compressed="yes">
+
+    <SummaryInformation Description="DCS server operations dashboard" />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Groundcrew">
+        <Component Id="GroundcrewServiceComponent" Guid="*">
+          <File Id="GroundcrewExecutable"
+                Source="$(PublishDir)\DcsDashboard.Api.exe"
+                KeyPath="yes">
+            <firewall:FirewallException
+              Id="GroundcrewTailscaleFirewall"
+              Name="Groundcrew (Tailscale)"
+              Description="Allows access to the Groundcrew dashboard from Tailscale peers."
+              File="GroundcrewExecutable"
+              Port="5080"
+              Protocol="tcp"
+              Profile="all"
+              Scope="any">
+              <firewall:RemoteAddress Value="100.64.0.0/10" />
+            </firewall:FirewallException>
+          </File>
+          <ServiceInstall
+            Id="GroundcrewServiceInstaller"
+            Name="DcsGroundcrew"
+            DisplayName="Groundcrew"
+            Description="DCS server operations dashboard and companion-service control plane."
+            Type="ownProcess"
+            Start="auto"
+            ErrorControl="normal" />
+          <ServiceControl
+            Id="GroundcrewServiceControl"
+            Name="DcsGroundcrew"
+            Start="install"
+            Stop="both"
+            Remove="uninstall"
+            Wait="yes" />
+        </Component>
+
+        <Files Include="$(PublishDir)\**">
+          <Exclude Files="$(PublishDir)\DcsDashboard.Api.exe" />
+          <Exclude Files="$(PublishDir)\**\*.pdb" />
+        </Files>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="GroundcrewProgramMenuFolder" Name="Groundcrew">
+        <Component Id="GroundcrewStartMenuComponent" Guid="*">
+          <util:InternetShortcut
+            Id="GroundcrewDashboardShortcut"
+            Name="Open Groundcrew"
+            Target="http://127.0.0.1:5080"
+            Type="url" />
+          <RemoveFolder Id="RemoveGroundcrewProgramMenuFolder" On="uninstall" />
+          <RegistryValue
+            Root="HKLM"
+            Key="Software\nabbl\Groundcrew"
+            Name="StartMenuShortcut"
+            Type="integer"
+            Value="1"
+            KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+  </Package>
+</Wix>
+

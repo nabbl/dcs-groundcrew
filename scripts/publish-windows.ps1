@@ -22,7 +22,7 @@ Copy-Item (Join-Path $Ui "dist\*") $WwwRoot -Recurse
 dotnet publish (Join-Path $Api "DcsDashboard.Api.csproj") `
     --configuration Release `
     --runtime win-x64 `
-    --self-contained false `
+    --self-contained true `
     --output $Output
 
 Write-Host "Published Groundcrew to $Output"

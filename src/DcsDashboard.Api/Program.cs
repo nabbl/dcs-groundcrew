@@ -2,9 +2,13 @@ using DcsDashboard.Api.Data;
 using DcsDashboard.Api.Hubs;
 using DcsDashboard.Api.Models;
 using DcsDashboard.Api.Services;
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Host.UseWindowsService(options => options.ServiceName = "DCS Groundcrew");
+if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_URLS")))
+    builder.WebHost.UseUrls(GetDefaultUrls());
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<SettingsStore>();
 builder.Services.AddSingleton<DcsProcessService>();
@@ -67,6 +71,26 @@ app.MapPost("/api/players/{playerId}/{action}", (string playerId, string action,
 app.MapHub<DashboardHub>("/hubs/dashboard");
 app.MapFallbackToFile("index.html");
 app.Run();
+
+static string[] GetDefaultUrls()
+{
+    const string localUrl = "http://127.0.0.1:5080";
+    if (!OperatingSystem.IsWindows()) return new[] { localUrl };
+
+    try
+    {
+        var tailscaleAddresses = NetworkInterface.GetAllNetworkInterfaces()
+            .Where(adapter => adapter.OperationalStatus == OperationalStatus.Up)
+            .Where(adapter => adapter.Name.Contains("Tailscale", StringComparison.OrdinalIgnoreCase)
+                || adapter.Description.Contains("Tailscale", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(adapter => adapter.GetIPProperties().UnicastAddresses)
+            .Select(address => address.Address)
+            .Where(address => address.AddressFamily == AddressFamily.InterNetwork)
+            .Select(address => $"http://{address}:5080");
+        return new[] { localUrl }.Concat(tailscaleAddresses).Distinct().ToArray();
+    }
+    catch { return new[] { localUrl }; }
+}
 
 static async Task<IResult> RunControl(Func<Task> action)
 {

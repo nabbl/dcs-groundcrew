@@ -1,0 +1,98 @@
+name: Build Windows installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    env:
+      BUILD_VERSION: 0.1.${{ github.run_number }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: src/dashboard-ui/package-lock.json
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build browser application
+        shell: pwsh
+        run: |
+          npm ci --prefix src/dashboard-ui
+          npm run build --prefix src/dashboard-ui
+
+      - name: Add browser application to service
+        shell: pwsh
+        run: |
+          $wwwroot = "src/DcsDashboard.Api/wwwroot"
+          if (Test-Path $wwwroot) { Remove-Item $wwwroot -Recurse -Force }
+          New-Item $wwwroot -ItemType Directory | Out-Null
+          Copy-Item "src/dashboard-ui/dist/*" $wwwroot -Recurse
+
+      - name: Publish self-contained Windows service
+        shell: pwsh
+        run: |
+          dotnet publish src/DcsDashboard.Api/DcsDashboard.Api.csproj `
+            --configuration Release `
+            --runtime win-x64 `
+            --self-contained true `
+            --output artifacts/publish `
+            -p:DebugType=None `
+            -p:DebugSymbols=false
+
+      - name: Install WiX Toolset
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 6.0.2
+          wix extension add -g WixToolset.Firewall.wixext/6.0.2
+          wix extension add -g WixToolset.Util.wixext/6.0.2
+
+      - name: Build MSI
+        shell: pwsh
+        run: |
+          New-Item artifacts/installer -ItemType Directory -Force | Out-Null
+          $publishDir = (Resolve-Path "artifacts/publish").Path
+          wix build installer/Package.wxs `
+            -arch x64 `
+            -d "PublishDir=$publishDir" `
+            -d "Version=$env:BUILD_VERSION" `
+            -ext WixToolset.Firewall.wixext `
+            -ext WixToolset.Util.wixext `
+            -pdbtype none `
+            -out "artifacts/installer/Groundcrew-$env:BUILD_VERSION-win-x64.msi"
+
+      - name: Create checksum
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem artifacts/installer/*.msi | Select-Object -First 1
+          $hash = (Get-FileHash $msi.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $($msi.Name)" | Set-Content "artifacts/installer/$($msi.Name).sha256"
+
+      - name: Upload MSI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: groundcrew-windows-installer-${{ github.run_number }}
+          path: |
+            artifacts/installer/*.msi
+            artifacts/installer/*.sha256
+          if-no-files-found: error
+          retention-days: 30
+
