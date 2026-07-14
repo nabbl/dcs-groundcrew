@@ -44,7 +44,9 @@ public sealed class SettingsStore
             await using var command = connection.CreateCommand();
             command.CommandText = "SELECT payload FROM settings WHERE id = 1";
             var payload = (string?)await command.ExecuteScalarAsync();
-            return payload is null ? new DashboardSettings() : JsonSerializer.Deserialize<DashboardSettings>(payload, _json) ?? new DashboardSettings();
+            var settings = payload is null ? new DashboardSettings() : JsonSerializer.Deserialize<DashboardSettings>(payload, _json) ?? new DashboardSettings();
+            Normalize(settings);
+            return settings;
         }
         finally { _gate.Release(); }
     }
@@ -63,5 +65,28 @@ public sealed class SettingsStore
             await command.ExecuteNonQueryAsync();
         }
         finally { _gate.Release(); }
+    }
+
+    private static void Normalize(DashboardSettings settings)
+    {
+        settings.Integrations ??= new List<IntegrationSettings>();
+        foreach (var defaults in IntegrationSettings.Defaults())
+        {
+            var existing = settings.Integrations.FirstOrDefault(item => string.Equals(item.Id, defaults.Id, StringComparison.OrdinalIgnoreCase));
+            if (existing is null)
+            {
+                settings.Integrations.Add(defaults);
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(existing.Name)) existing.Name = defaults.Name;
+            if (string.IsNullOrWhiteSpace(existing.Description)) existing.Description = defaults.Description;
+            if (string.IsNullOrWhiteSpace(existing.Kind) || (existing.Kind == "process" && defaults.Kind != "process")) existing.Kind = defaults.Kind;
+            if (string.IsNullOrWhiteSpace(existing.Host)) existing.Host = defaults.Host;
+            existing.Port ??= defaults.Port;
+            if (string.IsNullOrWhiteSpace(existing.SrsAddress)) existing.SrsAddress = defaults.SrsAddress;
+            if (string.IsNullOrWhiteSpace(existing.TelemetryAddress)) existing.TelemetryAddress = defaults.TelemetryAddress;
+            existing.Url ??= defaults.Url;
+        }
     }
 }

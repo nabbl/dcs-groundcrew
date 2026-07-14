@@ -4,6 +4,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>Groundcrew</AssemblyName>
+    <ApplicationIcon>..\..\installer\assets\groundcrew.ico</ApplicationIcon>
     <OutputType>WinExe</OutputType>
     <RootNamespace>DcsDashboard.Api</RootNamespace>
   </PropertyGroup>

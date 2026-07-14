@@ -1,4 +1,33 @@
-import type { DashboardSnapshot } from './types'
+import type { DashboardSettings, DashboardSnapshot, MissionLibraryResult } from './types'
+
+export const mockSettings: DashboardSettings = {
+  serverName: 'DCS SERVER ONE',
+  dcsExecutablePath: 'C:\\Program Files\\Eagle Dynamics\\DCS World Server\\bin-mt\\DCS.exe',
+  dcsArguments: '--server --norender',
+  savedGamesPath: 'C:\\Users\\dcs-server\\Saved Games\\DCS.server',
+  missionLibraryPath: 'D:\\DCS\\Missions',
+  tacviewRecordingsPath: 'D:\\DCS\\Tacview',
+  activeMissionPath: 'D:\\DCS\\Missions\\Operation Enduring Resolve v4.2.miz',
+  maxPlayers: 32,
+  integrations: [
+    { id: 'srs', name: 'SimpleRadio Standalone', description: 'Voice communications', kind: 'network-process', executablePath: 'C:\\SRS\\SR-Server.exe', arguments: '', configPath: 'C:\\SRS\\server.cfg', host: '127.0.0.1', port: 5002, srsAddress: '', telemetryAddress: '' },
+    { id: 'olympus', name: 'DCS Olympus', description: 'Real-time mission control', kind: 'web-process', executablePath: 'C:\\Olympus\\olympus.exe', arguments: '', configPath: 'C:\\Olympus\\olympus.json', host: '127.0.0.1', port: 3000, srsAddress: '', telemetryAddress: '', url: 'http://127.0.0.1:3000' },
+    { id: 'tacview', name: 'Tacview', description: 'Flight recording and real-time telemetry', kind: 'telemetry', executablePath: '', arguments: '', configPath: 'C:\\Users\\dcs-server\\Saved Games\\DCS.server\\Config\\options.lua', host: '127.0.0.1', port: 42674, srsAddress: '', telemetryAddress: '' },
+    { id: 'skyeye', name: 'SkyEye', description: 'AI-powered GCI', kind: 'process', executablePath: 'C:\\SkyEye\\skyeye.exe', arguments: '', configPath: 'C:\\SkyEye\\config.yaml', host: '127.0.0.1', srsAddress: '127.0.0.1:5002', telemetryAddress: '127.0.0.1:42674' },
+    { id: 'dks', name: 'Digital Kneeboard Simulator', description: 'Browser-based mission planning and kneeboards', kind: 'web', executablePath: '', arguments: '', configPath: '', host: '', srsAddress: '', telemetryAddress: '', url: 'https://www.digitalkneeboardsimulator.com/' },
+  ],
+}
+
+export const mockMissionLibrary: MissionLibraryResult = {
+  rootPath: mockSettings.missionLibraryPath,
+  configured: true,
+  exists: true,
+  missions: [
+    { name: 'Operation Enduring Resolve v4.2', fullPath: mockSettings.activeMissionPath, relativePath: 'Operation Enduring Resolve v4.2.miz', size: 48_200_000, modified: '2026-07-14T09:42:00Z', active: true },
+    { name: 'Flashpoint Levant — Dawn', fullPath: 'D:\\DCS\\Missions\\Flashpoint Levant — Dawn.miz', relativePath: 'Flashpoint Levant — Dawn.miz', size: 36_700_000, modified: '2026-07-12T14:12:00Z', active: false },
+    { name: 'Caucasus Training Range', fullPath: 'D:\\DCS\\Missions\\Training\\Caucasus Training Range.miz', relativePath: 'Training\\Caucasus Training Range.miz', size: 12_400_000, modified: '2026-07-08T18:05:00Z', active: false },
+  ],
+}
 
 export const mockSnapshot: DashboardSnapshot = {
   demoMode: true,
@@ -26,11 +55,11 @@ export const mockSnapshot: DashboardSnapshot = {
     { id: '4', name: 'Overlord | GCI', side: 'Spectator', slot: 'Game Master', ping: 31, joinedAt: '2026-07-14T11:51:00Z' },
   ],
   integrations: [
-    { id: 'srs', name: 'SimpleRadio Standalone', description: 'Voice communications', installed: true, running: true, version: '2.2.0.1', configurable: true },
-    { id: 'olympus', name: 'DCS Olympus', description: 'Real-time mission control', installed: true, running: true, version: '2.1.3', url: 'http://localhost:3000', configurable: true },
-    { id: 'tacview', name: 'Tacview', description: 'Flight recording and ACMI', installed: true, running: false, version: '1.9.4', configurable: true },
-    { id: 'skyeye', name: 'SkyEye', description: 'AI-powered GCI', installed: false, running: false, configurable: true },
-    { id: 'dks', name: 'Digital Kneeboard', description: 'Mission kneeboard tools', installed: false, running: false, configurable: true },
+    { id: 'srs', name: 'SimpleRadio Standalone', description: 'Voice communications', kind: 'network-process', installed: true, running: true, version: '2.2.0.1', configurable: true },
+    { id: 'olympus', name: 'DCS Olympus', description: 'Real-time mission control', kind: 'web-process', installed: true, running: true, version: '2.1.3', url: 'http://127.0.0.1:3000', configurable: true },
+    { id: 'tacview', name: 'Tacview', description: 'Flight recording and real-time telemetry', kind: 'telemetry', installed: true, running: false, version: '1.9.4', configurable: true },
+    { id: 'skyeye', name: 'SkyEye', description: 'AI-powered GCI', kind: 'process', installed: false, running: false, configurable: true },
+    { id: 'dks', name: 'Digital Kneeboard Simulator', description: 'Browser-based mission planning and kneeboards', kind: 'web', installed: true, running: false, url: 'https://www.digitalkneeboardsimulator.com/', configurable: true },
   ],
   chat: [
     { id: 'c1', author: 'SERVER', message: 'Mission loaded: Operation Enduring Resolve v4.2', timestamp: '14:31', system: true },
@@ -38,4 +67,3 @@ export const mockSnapshot: DashboardSnapshot = {
     { id: 'c3', author: 'Overlord | GCI', message: 'Picture clean west of the mountains.', timestamp: '14:35' },
   ],
 }
-

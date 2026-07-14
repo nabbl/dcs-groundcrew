@@ -20,6 +20,7 @@ export interface Integration {
   id: string
   name: string
   description: string
+  kind: string
   installed: boolean
   running: boolean
   version?: string
@@ -83,6 +84,28 @@ export interface DashboardSettings {
     description: string
     executablePath: string
     arguments: string
+    kind: string
+    configPath: string
+    host: string
+    port?: number
+    srsAddress: string
+    telemetryAddress: string
     url?: string
   }>
+}
+
+export interface MissionFile {
+  name: string
+  fullPath: string
+  relativePath: string
+  size: number
+  modified: string
+  active: boolean
+}
+
+export interface MissionLibraryResult {
+  rootPath: string
+  configured: boolean
+  exists: boolean
+  missions: MissionFile[]
 }

@@ -1,4 +1,4 @@
-import type { DashboardSettings, DashboardSnapshot, FileBrowserResult, FileSystemEntry } from './types'
+import type { DashboardSettings, DashboardSnapshot, FileBrowserResult, FileSystemEntry, MissionLibraryResult } from './types'
 import { mockSnapshot } from './mockData'
 import { HubConnectionBuilder, HttpTransportType } from '@microsoft/signalr'
 
@@ -66,6 +66,23 @@ export async function switchMission(path: string): Promise<{ ok: boolean; error?
   if (response.ok) return { ok: true }
   const problem = await response.json().catch(() => null) as { error?: string; detail?: string } | null
   return { ok: false, error: problem?.error ?? problem?.detail ?? 'Mission switch failed.' }
+}
+
+export async function getMissionLibrary(): Promise<MissionLibraryResult> {
+  const response = await fetch('/api/missions')
+  if (!response.ok) throw new Error('The configured mission folder cannot be read by Groundcrew.')
+  return await response.json() as MissionLibraryResult
+}
+
+export async function integrationAction(id: string, action: 'start' | 'stop' | 'restart'): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const response = await fetch(`/api/integrations/${encodeURIComponent(id)}/${action}`, { method: 'POST' })
+    if (response.ok) return { ok: true }
+    const problem = await response.json().catch(() => null) as { error?: string; detail?: string } | null
+    return { ok: false, error: problem?.error ?? problem?.detail ?? `Could not ${action} this integration.` }
+  } catch {
+    return { ok: false, error: 'The dashboard backend is not reachable.' }
+  }
 }
 
 export async function getSettings(): Promise<DashboardSettings | null> {

@@ -2,13 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   Activity, Ban, ChevronRight, CircleGauge, Clock3, Cpu, ExternalLink,
   FileArchive, FolderCog, Gauge, HardDrive, Headphones, Home, LayoutDashboard,
-  MemoryStick, MessageSquareText, MoreHorizontal, Network, PanelLeftClose,
+  MemoryStick, MessageSquareText, MoreHorizontal, Network, PanelLeftClose, PanelLeftOpen,
   Play, PlugZap, Power, Radio, RefreshCw, RotateCcw, Send, Server, Settings,
   ShieldAlert, Square, Users, X,
 } from 'lucide-react'
-import { browseServer, getSettings, getSnapshot, saveSettings, sendChatMessage, serverAction, subscribeToSnapshots, switchMission } from './api'
-import { mockSnapshot } from './mockData'
-import type { DashboardSettings, DashboardSnapshot, FileBrowserResult, Integration, Player, ServerState } from './types'
+import { browseServer, getMissionLibrary, getSettings, getSnapshot, integrationAction, saveSettings, sendChatMessage, serverAction, subscribeToSnapshots, switchMission } from './api'
+import { mockMissionLibrary, mockSettings, mockSnapshot } from './mockData'
+import type { DashboardSettings, DashboardSnapshot, FileBrowserResult, Integration, MissionLibraryResult, Player, ServerState } from './types'
 
 type Page = 'overview' | 'missions' | 'players' | 'integrations' | 'chat' | 'settings'
 
@@ -21,12 +21,7 @@ const nav: { id: Page; label: string; icon: typeof Home }[] = [
   { id: 'settings', label: 'Settings', icon: Settings },
 ]
 
-const missionOptions = [
-  { name: 'Operation Enduring Resolve v4.2', theatre: 'Syria', size: '48.2 MB', modified: 'Today, 11:42', active: true },
-  { name: 'Flashpoint Levant — Dawn', theatre: 'Syria', size: '36.7 MB', modified: '12 Jul 2026', active: false },
-  { name: 'Caucasus Training Range', theatre: 'Caucasus', size: '12.4 MB', modified: '08 Jul 2026', active: false },
-  { name: 'Marianas Carrier Ops', theatre: 'Marianas', size: '28.9 MB', modified: '02 Jul 2026', active: false },
-]
+type IntegrationConfig = DashboardSettings['integrations'][number]
 
 function duration(seconds: number) {
   const h = Math.floor(seconds / 3600)
@@ -60,26 +55,30 @@ function PlayerRow({ player, compact = false }: { player: Player; compact?: bool
   )
 }
 
-function IntegrationRow({ item, expanded, onExpand, onOpen }: { item: Integration; expanded: boolean; onExpand: () => void; onOpen: () => void }) {
+function IntegrationRow({ item, config, expanded, busy, error, onExpand, onOpen, onConfigure, onRestart }: { item: Integration; config?: IntegrationConfig; expanded: boolean; busy: boolean; error?: string; onExpand: () => void; onOpen: () => void; onConfigure: () => void; onRestart: () => void }) {
+  const webOnly = item.kind === 'web'
+  const endpoint = item.url ?? (config?.port ? `${config.host || '127.0.0.1'}:${config.port}` : undefined)
+  const status = webOnly ? (item.installed ? 'Web app' : 'Not configured') : item.running ? 'Running' : item.installed ? 'Stopped' : 'Not configured'
   return (
     <article className={`integration-row ${expanded ? 'expanded' : ''}`}>
       <button className="integration-summary" onClick={onExpand}>
         <span className="integration-mark"><Radio size={19} /></span>
         <span className="integration-copy"><strong>{item.name}</strong><small>{item.description}</small></span>
-        <span className={`status-label ${item.running ? 'good' : item.installed ? 'idle' : 'missing'}`}>
-          <StateDot state={item.running} />{item.running ? 'Running' : item.installed ? 'Stopped' : 'Not installed'}
+        <span className={`status-label ${item.running || webOnly && item.installed ? 'good' : item.installed ? 'idle' : 'missing'}`}>
+          <StateDot state={item.running || webOnly && item.installed} />{status}
         </span>
         <ChevronRight className="row-chevron" size={19} />
       </button>
       {expanded && (
         <div className="integration-detail">
           <div><span>Version</span><strong>{item.version ?? '—'}</strong></div>
-          <div><span>Web interface</span><strong>{item.url ?? 'Not configured'}</strong></div>
+          <div><span>{webOnly || item.kind === 'web-process' ? 'Web interface' : 'Endpoint'}</span><strong>{endpoint ?? 'Not configured'}</strong></div>
           <div className="integration-actions">
-            {item.installed ? <button className="button outline"><RefreshCw size={15} /> Restart</button> : <button className="button outline"><HardDrive size={15} /> Configure install</button>}
-            <button className="button ghost"><Settings size={15} /> Configuration</button>
-            {item.url && <button className="button ghost" onClick={onOpen}><ExternalLink size={15} /> Open tool</button>}
+            {!webOnly && item.kind !== 'telemetry' && item.installed && <button className="button outline" disabled={busy} onClick={onRestart}><RefreshCw className={busy ? 'spin' : ''} size={15} /> Restart</button>}
+            <button className={item.installed ? 'button ghost' : 'button outline'} onClick={onConfigure}>{item.installed ? <Settings size={15} /> : <HardDrive size={15} />} {item.installed ? 'Configuration' : 'Configure'}</button>
+            {item.url && <button className="button ghost" onClick={onOpen}><ExternalLink size={15} /> {item.id === 'dks' ? 'Open & sign in' : 'Open tool'}</button>}
           </div>
+          {error && <div className="integration-error"><ShieldAlert size={14} />{error}</div>}
         </div>
       )}
     </article>
@@ -123,7 +122,10 @@ function Overview({ data, onNavigate }: { data: DashboardSnapshot; onNavigate: (
         <section className="panel">
           <header className="panel-header"><div><span className="eyebrow">SERVICES</span><h2>Integrations</h2></div><button className="text-button" onClick={() => onNavigate('integrations')}>Manage <ChevronRight size={15} /></button></header>
           <div className="service-grid">
-            {data.integrations.map(item => <div className="service-tile" key={item.id}><StateDot state={item.running} /><span>{item.name.replace('SimpleRadio Standalone', 'SRS')}</span><small>{item.running ? 'Online' : item.installed ? 'Stopped' : 'Setup required'}</small></div>)}
+            {data.integrations.map(item => {
+              const available = item.running || (item.kind === 'web' && item.installed)
+              return <div className="service-tile" key={item.id}><StateDot state={available} /><span>{item.name.replace('SimpleRadio Standalone', 'SRS')}</span><small>{item.kind === 'web' && item.installed ? 'Web app' : item.running ? 'Online' : item.installed ? 'Stopped' : 'Setup required'}</small></div>
+            })}
           </div>
         </section>
       </div>
@@ -131,27 +133,102 @@ function Overview({ data, onNavigate }: { data: DashboardSnapshot; onNavigate: (
   )
 }
 
-function Missions({ onSwitch }: { onSwitch: (mission: string) => void }) {
+function Missions({ settings, demoMode, onSwitch, onOpenSettings }: { settings: DashboardSettings; demoMode: boolean; onSwitch: (mission: string) => void; onOpenSettings: () => void }) {
   const [browserOpen, setBrowserOpen] = useState(false)
+  const [library, setLibrary] = useState<MissionLibraryResult | null>(demoMode ? mockMissionLibrary : null)
+  const [loading, setLoading] = useState(!demoMode)
+  const [error, setError] = useState('')
+  const load = async () => {
+    if (demoMode) { setLibrary(mockMissionLibrary); setLoading(false); return }
+    setLoading(true); setError('')
+    try { setLibrary(await getMissionLibrary()) }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to load the mission library.') }
+    finally { setLoading(false) }
+  }
+  useEffect(() => { void load() }, [settings.missionLibraryPath, demoMode])
+  const formatSize = (bytes: number) => `${Math.round(bytes / 104857.6) / 10} MB`
+  const formatModified = (value: string) => new Date(value).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
   return <><section className="panel page-panel">
-    <header className="panel-header large"><div><span className="eyebrow">SAVED GAMES / MISSIONS</span><h1>Mission library</h1><p>Select a .miz file to load, then confirm the server restart.</p></div><button className="button outline" onClick={() => setBrowserOpen(true)}><FolderCog size={16} /> Browse server</button></header>
-    <div className="table-head"><span>Mission name</span><span>Theatre</span><span>Modified</span><span>Size</span><span /></div>
+    <header className="panel-header large"><div><span className="eyebrow">CONFIGURED MISSION LIBRARY</span><h1>Mission library</h1><p>{library?.rootPath || settings.missionLibraryPath || 'Choose a mission folder in Settings.'}</p></div><div className="header-actions"><button className="button ghost" onClick={() => void load()} disabled={loading}><RefreshCw className={loading ? 'spin' : ''} size={16} /> Refresh</button><button className="button outline" onClick={() => setBrowserOpen(true)}><FolderCog size={16} /> Browse server</button></div></header>
+    <div className="table-head"><span>Mission name</span><span>Folder</span><span>Modified</span><span>Size</span><span /></div>
     <div className="mission-list">
-      {missionOptions.map(m => <div className={`mission-row ${m.active ? 'active' : ''}`} key={m.name}>
-        <span className="file-mark"><FileArchive size={19} /></span><div><strong>{m.name}</strong><small>{m.active ? 'Currently running' : `${m.name}.miz`}</small></div><span>{m.theatre}</span><span>{m.modified}</span><span>{m.size}</span><button className={m.active ? 'button ghost' : 'button outline'} disabled={m.active} onClick={() => onSwitch(m.name)}>{m.active ? 'Active' : 'Load mission'}</button>
+      {loading && <div className="mission-empty"><RefreshCw className="spin" size={18} /> Reading {settings.missionLibraryPath || 'mission folder'}…</div>}
+      {error && <div className="mission-empty error"><ShieldAlert size={18} />{error}<button className="button outline" onClick={onOpenSettings}>Review settings</button></div>}
+      {!loading && !error && library && !library.configured && <div className="mission-empty"><FolderCog size={20} /><strong>No mission folder configured</strong><span>Choose the server-side folder containing your .miz files.</span><button className="button primary" onClick={onOpenSettings}>Open settings</button></div>}
+      {!loading && !error && library?.configured && !library.exists && <div className="mission-empty error"><ShieldAlert size={18} /><strong>Mission folder not found</strong><span>{library.rootPath}</span><button className="button outline" onClick={onOpenSettings}>Change folder</button></div>}
+      {!loading && !error && library?.exists && library.missions.length === 0 && <div className="mission-empty"><FileArchive size={20} /><strong>No .miz files found</strong><span>{library.rootPath}</span></div>}
+      {!loading && !error && library?.missions.map(m => <div className={`mission-row ${m.active ? 'active' : ''}`} key={m.fullPath}>
+        <span className="file-mark"><FileArchive size={19} /></span><div><strong>{m.name}</strong><small>{m.active ? 'Currently selected' : m.relativePath}</small></div><span>{m.relativePath.split(/[\\/]/).length > 1 ? m.relativePath.split(/[\\/]/).slice(0, -1).join('\\') : 'Root'}</span><span>{formatModified(m.modified)}</span><span>{formatSize(m.size)}</span><button className={m.active ? 'button ghost' : 'button outline'} disabled={m.active} onClick={() => onSwitch(m.fullPath)}>{m.active ? 'Active' : 'Load mission'}</button>
       </div>)}
     </div>
-  </section>{browserOpen && <FileBrowserDialog title="Select mission file" initialPath="D:\\DCS\\Missions" extension=".miz" onSelect={path => { setBrowserOpen(false); onSwitch(path) }} onClose={() => setBrowserOpen(false)} />}</>
+  </section>{browserOpen && <FileBrowserDialog title="Select mission file" initialPath={settings.missionLibraryPath || undefined} extension=".miz" onSelect={path => { setBrowserOpen(false); onSwitch(path) }} onClose={() => setBrowserOpen(false)} />}</>
 }
 
 function Players({ players }: { players: Player[] }) {
   return <section className="panel page-panel"><header className="panel-header large"><div><span className="eyebrow">LIVE ROSTER</span><h1>Connected players</h1><p>{players.length} players currently connected. Moderation actions are logged.</p></div></header><div className="rows roomy">{players.map(p => <PlayerRow key={p.id} player={p} />)}</div><div className="moderation-note"><ShieldAlert size={18} /><div><strong>Moderation controls</strong><span>Open a player’s action menu to kick, ban, mute, or move them to spectators.</span></div></div></section>
 }
 
-function Integrations({ integrations }: { integrations: Integration[] }) {
+function Integrations({ integrations, settings, onSaveSettings, onRefresh }: { integrations: Integration[]; settings: DashboardSettings; onSaveSettings: (settings: DashboardSettings) => Promise<boolean>; onRefresh: () => Promise<void> }) {
   const [expanded, setExpanded] = useState('srs')
   const [tool, setTool] = useState<Integration | null>(null)
-  return <><section className="panel page-panel"><header className="panel-header large"><div><span className="eyebrow">COMPANION SERVICES</span><h1>Integrations</h1><p>Install, configure, control, and open tools connected to this DCS instance.</p></div><button className="button outline"><RefreshCw size={16} /> Scan host</button></header><div className="integration-list">{integrations.map(item => <IntegrationRow key={item.id} item={item} expanded={expanded === item.id} onExpand={() => setExpanded(expanded === item.id ? '' : item.id)} onOpen={() => setTool(item)} />)}</div></section>{tool?.url && <ToolFrame tool={tool} onClose={() => setTool(null)} />}</>
+  const [configuring, setConfiguring] = useState<IntegrationConfig | null>(null)
+  const [busy, setBusy] = useState('')
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const open = (item: Integration) => {
+    if (!item.url) return
+    if (item.id === 'dks') window.open(item.url, '_blank', 'noopener,noreferrer')
+    else setTool(item)
+  }
+  const restart = async (item: Integration) => {
+    setBusy(item.id); setErrors(current => ({ ...current, [item.id]: '' }))
+    const result = await integrationAction(item.id, 'restart')
+    if (!result.ok) setErrors(current => ({ ...current, [item.id]: result.error ?? 'Restart failed.' }))
+    else await onRefresh()
+    setBusy('')
+  }
+  const saveConfiguration = async (next: DashboardSettings) => {
+    const ok = await onSaveSettings(next)
+    if (ok) await onRefresh()
+    return ok
+  }
+  return <><section className="panel page-panel"><header className="panel-header large"><div><span className="eyebrow">COMPANION SERVICES</span><h1>Integrations</h1><p>Configure actual processes, endpoints, and files used by this DCS host.</p></div></header><div className="integration-list">{integrations.map(item => {
+    const config = settings.integrations.find(value => value.id === item.id)
+    return <IntegrationRow key={item.id} item={item} config={config} expanded={expanded === item.id} busy={busy === item.id} error={errors[item.id]} onExpand={() => setExpanded(expanded === item.id ? '' : item.id)} onOpen={() => open(item)} onConfigure={() => config && setConfiguring(config)} onRestart={() => void restart(item)} />
+  })}</div></section>{tool?.url && <ToolFrame tool={tool} onClose={() => setTool(null)} />}{configuring && <IntegrationConfigDialog key={configuring.id} config={configuring} settings={settings} onSave={saveConfiguration} onClose={() => setConfiguring(null)} />}</>
+}
+
+function IntegrationConfigDialog({ config, settings, onSave, onClose }: { config: IntegrationConfig; settings: DashboardSettings; onSave: (settings: DashboardSettings) => Promise<boolean>; onClose: () => void }) {
+  const [value, setValue] = useState<IntegrationConfig>({ ...config })
+  const [browsing, setBrowsing] = useState<'executablePath' | 'configPath' | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const update = <K extends keyof IntegrationConfig>(key: K, next: IntegrationConfig[K]) => setValue(current => ({ ...current, [key]: next }))
+  const save = async () => {
+    setSaving(true); setError('')
+    const next = { ...settings, integrations: settings.integrations.map(item => item.id === value.id ? value : item) }
+    if (await onSave(next)) onClose()
+    else setError('Groundcrew could not save this configuration.')
+    setSaving(false)
+  }
+  const browsePath = browsing ? value[browsing] : ''
+  return <><div className="dialog-backdrop" role="presentation" onMouseDown={onClose}><div className="integration-dialog" role="dialog" aria-modal="true" onMouseDown={event => event.stopPropagation()}>
+    <header><div><span className="eyebrow">INTEGRATION CONFIGURATION</span><h2>{value.name}</h2><p>{value.description}</p></div><button className="icon-button" onClick={onClose} aria-label="Close configuration"><X size={19} /></button></header>
+    <div className="config-form">
+      {value.kind !== 'web' && value.id !== 'tacview' && <ConfigPathField label="Executable" value={value.executablePath} onChange={next => update('executablePath', next)} onBrowse={() => setBrowsing('executablePath')} />}
+      {value.kind !== 'web' && <ConfigPathField label={value.id === 'tacview' ? 'DCS options file' : 'Configuration file'} value={value.configPath} onChange={next => update('configPath', next)} onBrowse={() => setBrowsing('configPath')} />}
+      {(value.id === 'srs' || value.id === 'olympus' || value.id === 'tacview') && <div className="config-pair"><label><span>Host</span><input value={value.host} onChange={event => update('host', event.target.value)} placeholder="127.0.0.1" /></label><label><span>Port</span><input type="number" min="1" max="65535" value={value.port ?? ''} onChange={event => update('port', event.target.value ? Number(event.target.value) : undefined)} /></label></div>}
+      {value.id === 'skyeye' && <><label className="config-field"><span>SRS server address</span><input value={value.srsAddress} onChange={event => update('srsAddress', event.target.value)} placeholder="127.0.0.1:5002" /></label><label className="config-field"><span>Tacview telemetry address</span><input value={value.telemetryAddress} onChange={event => update('telemetryAddress', event.target.value)} placeholder="127.0.0.1:42674" /></label></>}
+      {(value.kind === 'web' || value.kind === 'web-process') && <label className="config-field"><span>Web URL</span><input value={value.url ?? ''} onChange={event => update('url', event.target.value)} placeholder="http://127.0.0.1:3000" /></label>}
+      {value.kind !== 'web' && value.id !== 'tacview' && <label className="config-field"><span>Launch arguments</span><input value={value.arguments} onChange={event => update('arguments', event.target.value)} placeholder={value.id === 'skyeye' ? '--config-file config.yaml' : 'Optional'} /></label>}
+      <div className="config-note">{value.id === 'srs' && 'SRS normally listens on TCP and UDP port 5002. Groundcrew detects the running service from the process or local TCP listener.'}{value.id === 'olympus' && 'Olympus normally exposes its frontend over HTTP on port 3000. The URL is used for the embedded tool view.'}{value.id === 'tacview' && 'Tacview real-time telemetry defaults to TCP 42674. Recording storage is configured separately under Server paths.'}{value.id === 'skyeye' && 'SkyEye connects to both SRS and Tacview. Its Windows config.yaml normally sits beside skyeye.exe.'}{value.id === 'dks' && 'DKS is a hosted web application. Groundcrew opens it in a new browser tab so you can sign in with Discord or Google.'}</div>
+      {error && <div className="integration-error"><ShieldAlert size={14} />{error}</div>}
+    </div>
+    <footer><button className="button ghost" onClick={onClose}>Cancel</button>{value.url && <a className="button outline" href={value.url} target="_blank" rel="noreferrer"><ExternalLink size={15} /> Test URL</a>}<button className="button primary" disabled={saving} onClick={() => void save()}>{saving ? 'Saving…' : 'Save configuration'}</button></footer>
+  </div></div>{browsing && <FileBrowserDialog title={`Select ${browsing === 'executablePath' ? 'executable' : 'configuration file'}`} initialPath={browsePath.replace(/[\\/][^\\/]+$/, '') || undefined} extension={browsing === 'executablePath' ? '.exe' : undefined} onSelect={path => { update(browsing, path); setBrowsing(null) }} onClose={() => setBrowsing(null)} />}</>
+}
+
+function ConfigPathField({ label, value, onChange, onBrowse }: { label: string; value: string; onChange: (value: string) => void; onBrowse: () => void }) {
+  return <label className="config-field"><span>{label}</span><div><input value={value} onChange={event => onChange(event.target.value)} placeholder="Select a file on the server host" /><button className="button outline" type="button" onClick={onBrowse}><FolderCog size={15} /> Browse</button></div></label>
 }
 
 function ToolFrame({ tool, onClose }: { tool: Integration; onClose: () => void }) {
@@ -175,21 +252,19 @@ function Chat({ data }: { data: DashboardSnapshot }) {
   return <section className="panel page-panel chat-panel"><header className="panel-header large"><div><span className="eyebrow">LIVE CHANNEL</span><h1>Server chat</h1><p>Messages are sent to all connected players.</p></div><span className={`status-label ${data.demoMode ? 'idle' : 'good'}`}><StateDot state={!data.demoMode} /> {data.demoMode ? 'Preview' : 'Connected'}</span></header><div className="chat-log">{messages.map(m => <div className={`chat-message ${m.system ? 'system' : ''}`} key={m.id}><span>{m.timestamp}</span><strong>{m.author}</strong><p>{m.message}</p></div>)}</div>{error && <div className="chat-error"><ShieldAlert size={15} />{error}</div>}<div className="chat-compose"><input value={message} onChange={e => setMessage(e.target.value)} onKeyDown={e => e.key === 'Enter' && void send()} placeholder="Message all players…" /><button className="button primary" onClick={() => void send()}><Send size={16} /> Send</button></div></section>
 }
 
-function SettingsPage() {
+function SettingsPage({ settings, onSave }: { settings: DashboardSettings; onSave: (settings: DashboardSettings) => Promise<boolean> }) {
   const [paths, setPaths] = useState<Record<string, string>>({
-    'DCS executable': 'C:\\Program Files\\Eagle Dynamics\\DCS World Server\\bin-mt\\DCS.exe',
-    'Saved Games': 'C:\\Users\\dcs-server\\Saved Games\\DCS.openbeta_server',
-    'Mission library': 'D:\\DCS\\Missions',
-    'Tacview recordings': 'D:\\DCS\\Tacview',
+    'DCS executable': settings.dcsExecutablePath,
+    'Saved Games': settings.savedGamesPath,
+    'Mission library': settings.missionLibraryPath,
+    'Tacview recordings': settings.tacviewRecordingsPath,
   })
   const [browsing, setBrowsing] = useState<string | null>(null)
-  const [settings, setSettings] = useState<DashboardSettings | null>(null)
   const [saved, setSaved] = useState<'idle' | 'ok' | 'error'>('idle')
-  useEffect(() => { void getSettings().then(value => { if (!value) return; setSettings(value); setPaths({ 'DCS executable': value.dcsExecutablePath, 'Saved Games': value.savedGamesPath, 'Mission library': value.missionLibraryPath, 'Tacview recordings': value.tacviewRecordingsPath }) }) }, [])
+  useEffect(() => { setPaths({ 'DCS executable': settings.dcsExecutablePath, 'Saved Games': settings.savedGamesPath, 'Mission library': settings.missionLibraryPath, 'Tacview recordings': settings.tacviewRecordingsPath }) }, [settings])
   const save = async () => {
-    if (!settings) { setSaved('error'); return }
     const next = { ...settings, dcsExecutablePath: paths['DCS executable'], savedGamesPath: paths['Saved Games'], missionLibraryPath: paths['Mission library'], tacviewRecordingsPath: paths['Tacview recordings'] }
-    setSaved(await saveSettings(next) ? 'ok' : 'error')
+    setSaved(await onSave(next) ? 'ok' : 'error')
   }
   return <><section className="panel page-panel"><header className="panel-header large"><div><span className="eyebrow">HOST CONFIGURATION</span><h1>Settings</h1><p>Paths are selected on the Windows host and never expose unrestricted filesystem access.</p></div><div className="save-area">{saved === 'ok' && <span>Saved</span>}{saved === 'error' && <span className="error">Backend unavailable</span>}<button className="button primary" onClick={() => void save()}>Save changes</button></div></header><div className="settings-section"><h3>Server paths</h3>{Object.entries(paths).map(([label, path]) => <div className="path-field" key={label}><span>{label}</span><div><input value={path} onChange={event => setPaths({ ...paths, [label]: event.target.value })} /><button type="button" className="button outline" onClick={() => setBrowsing(label)}><FolderCog size={16} /> Browse</button></div></div>)}</div><div className="settings-section"><h3>Network</h3><div className="path-field"><span>Dashboard bind address</span><div><input defaultValue="100.x.x.x:5080" /><small>Configured through ASPNETCORE_URLS; Tailscale address recommended</small></div></div></div></section>{browsing && <FileBrowserDialog title={`Select ${browsing}`} initialPath={browsing === 'DCS executable' ? paths[browsing].replace(/\\[^\\]+$/, '') : paths[browsing]} allowDirectory={browsing !== 'DCS executable'} extension={browsing === 'DCS executable' ? '.exe' : undefined} onSelect={path => { setPaths({ ...paths, [browsing]: path }); setBrowsing(null) }} onClose={() => setBrowsing(null)} />}</>
 }
@@ -216,15 +291,24 @@ function ConfirmDialog({ title, body, action, danger, onConfirm, onClose }: { ti
 export default function App() {
   const [page, setPage] = useState<Page>('overview')
   const [data, setData] = useState<DashboardSnapshot>(mockSnapshot)
+  const [settings, setSettings] = useState<DashboardSettings>(mockSettings)
+  const [navExpanded, setNavExpanded] = useState(false)
   const [pending, setPending] = useState<{ kind: 'start' | 'stop' | 'restart' | 'mission'; value?: string } | null>(null)
   const [busy, setBusy] = useState(false)
 
+  const refreshSnapshot = async () => setData(await getSnapshot())
   useEffect(() => {
-    getSnapshot().then(setData)
+    void refreshSnapshot()
+    void getSettings().then(value => value && setSettings(value))
     const unsubscribe = subscribeToSnapshots(setData)
-    const polling = window.setInterval(() => { void getSnapshot().then(setData) }, 5000)
+    const polling = window.setInterval(() => { void refreshSnapshot() }, 5000)
     return () => { unsubscribe(); window.clearInterval(polling) }
   }, [])
+  const persistSettings = async (next: DashboardSettings) => {
+    const ok = data.demoMode || await saveSettings(next)
+    if (ok) setSettings(next)
+    return ok
+  }
   const title = useMemo(() => nav.find(item => item.id === page)?.label ?? 'Overview', [page])
   const srs = data.integrations.find(item => item.id === 'srs')
   const olympus = data.integrations.find(item => item.id === 'olympus')
@@ -235,27 +319,30 @@ export default function App() {
     const missionResult = pending.kind === 'mission' && pending.value && !data.demoMode ? await switchMission(pending.value) : null
     if (pending.kind !== 'mission' || data.demoMode) await serverAction(action)
     const missionName = pending.value?.split(/[\\/]/).pop()?.replace(/\.miz$/i, '')
-    if (!missionResult || missionResult.ok) setData(current => ({ ...current, server: { ...current.server, state: action === 'stop' ? 'stopped' : 'running', mission: missionName ?? current.server.mission } }))
+    if (!missionResult || missionResult.ok) {
+      setData(current => ({ ...current, server: { ...current.server, state: action === 'stop' ? 'stopped' : 'running', mission: missionName ?? current.server.mission } }))
+      if (pending.kind === 'mission' && pending.value) setSettings(current => ({ ...current, activeMissionPath: pending.value! }))
+    }
     setBusy(false); setPending(null)
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${navExpanded ? 'nav-expanded' : ''}`}>
       <aside className="nav-rail">
-        <div className="brand-mark"><span>G</span><i /></div>
-        <nav>{nav.map(({ id, label, icon: Icon }) => <button key={id} className={page === id ? 'active' : ''} onClick={() => setPage(id)} aria-label={label} data-label={label}><Icon size={21} /></button>)}</nav>
-        <button className="rail-bottom" aria-label="Collapse navigation"><PanelLeftClose size={20} /></button>
+        <div className="brand-mark"><img src="/groundcrew-mark.svg" alt="" /><span>Groundcrew</span></div>
+        <nav>{nav.map(({ id, label, icon: Icon }) => <button key={id} className={page === id ? 'active' : ''} onClick={() => setPage(id)} aria-label={label} data-label={label}><Icon size={21} /><span className="nav-label">{label}</span></button>)}</nav>
+        <button className="rail-bottom" onClick={() => setNavExpanded(value => !value)} aria-label={navExpanded ? 'Collapse navigation' : 'Expand navigation'} aria-expanded={navExpanded}>{navExpanded ? <PanelLeftClose size={20} /> : <PanelLeftOpen size={20} />}<span className="nav-label">Collapse menu</span></button>
       </aside>
 
       <main className="workspace">
         <header className="topbar"><div><span>GROUNDCREW</span><strong>{title}</strong></div><div className="topbar-meta">{data.demoMode && <span className="demo-badge">PREVIEW DATA</span>}<span><StateDot state={data.server.state} /> Host connected</span><span>14:38 CEST</span></div></header>
         <div className="page-content">
           {page === 'overview' && <Overview data={data} onNavigate={setPage} />}
-          {page === 'missions' && <Missions onSwitch={value => setPending({ kind: 'mission', value })} />}
+          {page === 'missions' && <Missions settings={settings} demoMode={data.demoMode} onSwitch={value => setPending({ kind: 'mission', value })} onOpenSettings={() => setPage('settings')} />}
           {page === 'players' && <Players players={data.players} />}
-          {page === 'integrations' && <Integrations integrations={data.integrations} />}
+          {page === 'integrations' && <Integrations integrations={data.integrations} settings={settings} onSaveSettings={persistSettings} onRefresh={refreshSnapshot} />}
           {page === 'chat' && <Chat data={data} />}
-          {page === 'settings' && <SettingsPage />}
+          {page === 'settings' && <SettingsPage settings={settings} onSave={persistSettings} />}
         </div>
       </main>
 

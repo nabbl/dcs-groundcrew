@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net.NetworkInformation;
 using DcsDashboard.Api.Data;
 using DcsDashboard.Api.Models;
 
@@ -12,13 +13,21 @@ public sealed class IntegrationService
     public async Task<IReadOnlyList<IntegrationStatus>> GetStatusesAsync()
     {
         var settings = await _store.GetAsync();
+        var listeningPorts = OperatingSystem.IsWindows()
+            ? IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners().Select(endpoint => endpoint.Port).ToHashSet()
+            : new HashSet<int>();
         return settings.Integrations.Select(item =>
         {
-            var installed = !string.IsNullOrWhiteSpace(item.ExecutablePath) && File.Exists(item.ExecutablePath);
-            var process = installed ? Process.GetProcessesByName(Path.GetFileNameWithoutExtension(item.ExecutablePath)).FirstOrDefault() : null;
+            var executableInstalled = !string.IsNullOrWhiteSpace(item.ExecutablePath) && File.Exists(item.ExecutablePath);
+            var configInstalled = !string.IsNullOrWhiteSpace(item.ConfigPath) && File.Exists(item.ConfigPath);
+            var portListening = item.Port is > 0 && listeningPorts.Contains(item.Port.Value);
+            var webConfigured = item.Kind == "web" && !string.IsNullOrWhiteSpace(item.Url);
+            var tacviewConfigured = item.Id == "tacview" && !string.IsNullOrWhiteSpace(settings.TacviewRecordingsPath) && Directory.Exists(settings.TacviewRecordingsPath);
+            var installed = executableInstalled || configInstalled || portListening || webConfigured || tacviewConfigured;
+            var process = executableInstalled ? Process.GetProcessesByName(Path.GetFileNameWithoutExtension(item.ExecutablePath)).FirstOrDefault() : null;
             string? version = null;
-            try { version = installed ? FileVersionInfo.GetVersionInfo(item.ExecutablePath).FileVersion : null; } catch { }
-            return new IntegrationStatus(item.Id, item.Name, item.Description, installed, process is not null, version, item.Url, true);
+            try { version = executableInstalled ? FileVersionInfo.GetVersionInfo(item.ExecutablePath).FileVersion : null; } catch { }
+            return new IntegrationStatus(item.Id, item.Name, item.Description, item.Kind, installed, process is not null || portListening, version, item.Url, true);
         }).ToList();
     }
 
@@ -34,4 +43,3 @@ public sealed class IntegrationService
         if (action is "start" or "restart") Process.Start(new ProcessStartInfo(item.ExecutablePath, item.Arguments) { WorkingDirectory = Path.GetDirectoryName(item.ExecutablePath)!, UseShellExecute = false });
     }
 }
-

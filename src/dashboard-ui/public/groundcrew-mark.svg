@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-labelledby="title">
+  <title id="title">Groundcrew</title>
+  <path d="M22 13h55l-7 70H15z" fill="#111315" stroke="#f6a817" stroke-width="5"/>
+  <path d="M66 36c-4-7-10-10-19-10-14 0-23 9-23 23 0 15 9 23 23 23 7 0 14-2 20-6V46H47v10h8v4c-2 1-5 2-8 2-7 0-11-5-11-13 0-8 4-13 12-13 4 0 7 2 10 6z" fill="#f1f2f2"/>
+  <path d="M17 78h54" stroke="#f6a817" stroke-width="3"/>
+</svg>

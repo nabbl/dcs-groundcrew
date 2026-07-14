@@ -13,8 +13,10 @@ Working now:
 - host CPU, memory, disk, DCS working-set, DCS CPU, and process uptime collection
 - SQLite-backed host configuration
 - server-side Windows file browser for executables, Saved Games, missions, and Tacview recordings
-- `.miz` selection with an explicit restart confirmation flow
-- SRS, Olympus, Tacview, SkyEye, and Digital Kneeboard install/running detection and process controls once their paths are configured
+- recursive `.miz` discovery from the mission-library folder configured in Settings, with an explicit restart confirmation flow
+- working per-integration configuration for executable/config paths, URLs, and network endpoints
+- process and local-port status detection for SRS, Olympus, Tacview, and SkyEye, plus launch/restart controls where an executable is configured
+- Digital Kneeboard Simulator launch into its hosted sign-in page
 - embedded integration window with a new-tab fallback
 - preview data when the frontend is run without the Windows service
 - responsive desktop/tablet/mobile layout
@@ -23,7 +25,7 @@ Adapter work still required after DCS is installed:
 
 - use the local DCS Dedicated Server WebGUI interface for current players, server FPS, mission control, chat, kick, and ban
 - confirm the exact WebGUI command set against the installed DCS build before enabling mutations
-- connect each integration’s configuration schema and installer/update workflow
+- add third-party installer/update workflows and, where useful, direct editing of each tool's native configuration file
 - test iframe headers for Olympus and Digital Kneeboard; use a host-side reverse proxy or new tab where framing is blocked
 
 The API currently returns `501 Not Implemented` for chat and moderation instead of claiming those actions succeeded. Mission selection is stored and the process is restarted, but the DCS WebGUI adapter must be completed before mission switching should be considered production-ready.

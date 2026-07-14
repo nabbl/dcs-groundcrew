@@ -38,6 +38,33 @@ app.MapPost("/api/server/start", (DcsProcessService service) => RunControl(servi
 app.MapPost("/api/server/stop", (DcsProcessService service) => RunControl(service.StopAsync));
 app.MapPost("/api/server/restart", (DcsProcessService service) => RunControl(service.RestartAsync));
 
+app.MapGet("/api/missions", async (SettingsStore store) =>
+{
+    var settings = await store.GetAsync();
+    var root = settings.MissionLibraryPath;
+    if (string.IsNullOrWhiteSpace(root)) return Results.Ok(new MissionLibraryResult("", false, false, Array.Empty<MissionFile>()));
+    if (!Directory.Exists(root)) return Results.Ok(new MissionLibraryResult(root, true, false, Array.Empty<MissionFile>()));
+
+    try
+    {
+        var activePath = string.IsNullOrWhiteSpace(settings.ActiveMissionPath) ? null : Path.GetFullPath(settings.ActiveMissionPath);
+        var missions = Directory.EnumerateFiles(root, "*.miz", SearchOption.AllDirectories)
+            .Take(500)
+            .Select(path => new FileInfo(path))
+            .OrderByDescending(file => file.LastWriteTimeUtc)
+            .Select(file => new MissionFile(
+                Path.GetFileNameWithoutExtension(file.Name),
+                file.FullName,
+                Path.GetRelativePath(root, file.FullName),
+                file.Length,
+                file.LastWriteTimeUtc,
+                activePath is not null && string.Equals(Path.GetFullPath(file.FullName), activePath, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+        return Results.Ok(new MissionLibraryResult(root, true, true, missions));
+    }
+    catch (UnauthorizedAccessException) { return Results.Problem("The dashboard service account cannot read the configured mission library.", statusCode: 403); }
+});
+
 app.MapGet("/api/files/roots", () => Results.Ok(DriveInfo.GetDrives().Where(d => d.IsReady).Select(d => new FileSystemEntry(d.Name, d.RootDirectory.FullName, true, null, DateTimeOffset.MinValue))));
 app.MapGet("/api/files", (string path) =>
 {

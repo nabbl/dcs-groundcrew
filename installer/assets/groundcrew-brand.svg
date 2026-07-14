@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 120" role="img" aria-labelledby="title">
+  <title id="title">Groundcrew</title>
+  <g transform="translate(8 7)">
+    <path d="M22 6h82l-10 99H12z" fill="#111315" stroke="#f6a817" stroke-width="6"/>
+    <text x="57" y="80" text-anchor="middle" fill="#f1f2f2" font-family="Arial Black, Arial, sans-serif" font-size="70" font-style="italic" font-weight="900">G</text>
+    <path d="M15 97h82" stroke="#f6a817" stroke-width="4"/>
+  </g>
+  <text x="132" y="64" fill="#111315" font-family="Arial Black, Arial, sans-serif" font-size="38" font-style="italic" font-weight="900" letter-spacing="1">GROUNDCREW</text>
+  <text x="135" y="87" fill="#b7760b" font-family="Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="4">DCS SERVER OPERATIONS</text>
+</svg>

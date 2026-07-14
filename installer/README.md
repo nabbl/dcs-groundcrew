@@ -14,6 +14,8 @@ Installed resources:
 
 The MSI includes a setup wizard for choosing the installation directory, following progress, and displaying installation or service-start failures. Its final screen offers to launch Groundcrew immediately. It also enables verbose Windows Installer logging; automatically generated logs are written to `%TEMP%` as `MSI*.log`.
 
+The setup wizard, installed executable, Start Menu shortcut, and Apps & Features entry use the Groundcrew brand mark from `installer/assets`.
+
 `Groundcrew.exe` has two roles: Windows starts it with `--service` to host both the API and compiled frontend, while launching it normally ensures the service is running and opens `http://127.0.0.1:5080` in the default browser.
 
 The application detects the active Tailscale adapter when the service starts and listens on its IPv4 address as well as localhost. Set the `ASPNETCORE_URLS` environment variable on the service if a different binding is required.

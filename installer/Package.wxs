@@ -12,6 +12,10 @@
 
     <SummaryInformation Description="DCS server operations dashboard" />
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+    <Icon Id="GroundcrewIcon" SourceFile="installer\assets\groundcrew.ico" />
+    <Property Id="ARPPRODUCTICON" Value="GroundcrewIcon" />
+    <WixVariable Id="WixUIDialogBmp" Value="installer\assets\groundcrew-dialog.bmp" />
+    <WixVariable Id="WixUIBannerBmp" Value="installer\assets\groundcrew-banner.bmp" />
     <Property Id="MsiLogging" Value="voicewarmupx" />
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Open Groundcrew" />
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
@@ -120,6 +124,7 @@
             Name="Groundcrew"
             Description="Open the Groundcrew DCS server dashboard"
             Target="[INSTALLFOLDER]Groundcrew.exe"
+            Icon="GroundcrewIcon"
             WorkingDirectory="INSTALLFOLDER" />
           <RemoveFolder Id="RemoveGroundcrewProgramMenuFolder" On="uninstall" />
           <RegistryValue
