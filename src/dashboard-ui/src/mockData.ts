@@ -1,4 +1,4 @@
-import type { DashboardSettings, DashboardSnapshot, MissionLibraryResult } from './types'
+import type { DashboardSettings, DashboardSnapshot, DcsServerConfiguration, MissionLibraryResult } from './types'
 
 export const mockSettings: DashboardSettings = {
   serverName: 'DCS SERVER ONE',
@@ -27,6 +27,37 @@ export const mockMissionLibrary: MissionLibraryResult = {
     { name: 'Flashpoint Levant — Dawn', fullPath: 'D:\\DCS\\Missions\\Flashpoint Levant — Dawn.miz', relativePath: 'Flashpoint Levant — Dawn.miz', size: 36_700_000, modified: '2026-07-12T14:12:00Z', active: false },
     { name: 'Caucasus Training Range', fullPath: 'D:\\DCS\\Missions\\Training\\Caucasus Training Range.miz', relativePath: 'Training\\Caucasus Training Range.miz', size: 12_400_000, modified: '2026-07-08T18:05:00Z', active: false },
   ],
+}
+
+export const mockServerConfiguration: DcsServerConfiguration = {
+  path: `${mockSettings.savedGamesPath}\\Config\\serverSettings.lua`,
+  exists: true,
+  modified: '2026-07-14T14:12:00Z',
+  name: 'Groundcrew Tactical Server',
+  description: 'Public training and cooperative missions. SRS is recommended.',
+  passwordConfigured: true,
+  maxPlayers: 32,
+  port: 10308,
+  isPublic: true,
+  bindAddress: '',
+  listLoop: true,
+  listShuffle: false,
+  resumeMode: 1,
+  maxPing: 350,
+  requirePureClients: true,
+  requirePureScripts: false,
+  requirePureTextures: true,
+  requirePureModels: true,
+  allowOwnshipExport: true,
+  allowObjectExport: false,
+  allowSensorExport: false,
+  allowChangeSkin: true,
+  allowChangeTailNumber: true,
+  voiceChatServer: false,
+  allowTrialOnlyClients: false,
+  allowDynamicRadio: true,
+  allowPlayersPool: true,
+  serverCanScreenshot: false,
 }
 
 export const mockSnapshot: DashboardSnapshot = {

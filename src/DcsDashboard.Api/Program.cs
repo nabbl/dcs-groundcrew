@@ -22,6 +22,7 @@ builder.Services.AddSingleton<SettingsStore>();
 builder.Services.AddSingleton<DcsProcessService>();
 builder.Services.AddSingleton<HostMetricsService>();
 builder.Services.AddSingleton<IntegrationService>();
+builder.Services.AddSingleton<DcsServerConfigurationService>();
 builder.Services.AddScoped<SnapshotService>();
 builder.Services.AddHostedService<SnapshotBroadcastService>();
 
@@ -33,6 +34,15 @@ app.MapGet("/api/health", () => Results.Ok(new { status = "ok", timestamp = Date
 app.MapGet("/api/snapshot", async (SnapshotService service) => Results.Ok(await service.GetAsync()));
 app.MapGet("/api/settings", async (SettingsStore store) => Results.Ok(await store.GetAsync()));
 app.MapPut("/api/settings", async (DashboardSettings settings, SettingsStore store) => { await store.SaveAsync(settings); return Results.NoContent(); });
+app.MapGet("/api/server-config", async (DcsServerConfigurationService service) => Results.Ok(await service.GetAsync()));
+app.MapPut("/api/server-config", async (DcsServerConfigurationUpdate update, DcsServerConfigurationService service) =>
+{
+    try { return Results.Ok(await service.SaveAsync(update)); }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
+    catch (UnauthorizedAccessException) { return Results.Problem("The dashboard service account cannot update serverSettings.lua.", statusCode: 403); }
+    catch (IOException ex) { return Results.Problem($"serverSettings.lua could not be updated: {ex.Message}", statusCode: 409); }
+});
 
 app.MapPost("/api/server/start", (DcsProcessService service) => RunControl(service.StartAsync));
 app.MapPost("/api/server/stop", (DcsProcessService service) => RunControl(service.StopAsync));

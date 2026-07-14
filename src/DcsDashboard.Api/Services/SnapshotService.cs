@@ -9,10 +9,11 @@ public sealed class SnapshotService
     private readonly DcsProcessService _dcs;
     private readonly HostMetricsService _metrics;
     private readonly IntegrationService _integrations;
+    private readonly DcsServerConfigurationService _serverConfiguration;
 
-    public SnapshotService(SettingsStore settings, DcsProcessService dcs, HostMetricsService metrics, IntegrationService integrations)
+    public SnapshotService(SettingsStore settings, DcsProcessService dcs, HostMetricsService metrics, IntegrationService integrations, DcsServerConfigurationService serverConfiguration)
     {
-        _settings = settings; _dcs = dcs; _metrics = metrics; _integrations = integrations;
+        _settings = settings; _dcs = dcs; _metrics = metrics; _integrations = integrations; _serverConfiguration = serverConfiguration;
     }
 
     public async Task<DashboardSnapshot> GetAsync()
@@ -27,8 +28,10 @@ public sealed class SnapshotService
         }
         var mission = string.IsNullOrWhiteSpace(settings.ActiveMissionPath) ? "No mission selected" : Path.GetFileNameWithoutExtension(settings.ActiveMissionPath);
         var uptime = running ? Math.Max(0, (long)(DateTimeOffset.Now - process!.StartTime).TotalSeconds) : 0;
-        var server = new ServerStatus(running ? "running" : "stopped", settings.ServerName, version, mission, "Unknown", uptime, 0, 0, settings.MaxPlayers);
+        var serverConfiguration = await _serverConfiguration.GetAsync();
+        var serverName = serverConfiguration.Exists ? serverConfiguration.Name : settings.ServerName;
+        var maxPlayers = serverConfiguration.Exists ? serverConfiguration.MaxPlayers : settings.MaxPlayers;
+        var server = new ServerStatus(running ? "running" : "stopped", serverName, version, mission, "Unknown", uptime, 0, 0, maxPlayers);
         return new DashboardSnapshot(false, server, _metrics.Read(process, settings.MissionLibraryPath), Array.Empty<Player>(), await _integrations.GetStatusesAsync(), Array.Empty<ChatMessage>());
     }
 }
-

@@ -14,6 +14,8 @@ Working now:
 - SQLite-backed host configuration
 - server-side Windows file browser for executables, Saved Games, missions, and Tacview recordings
 - recursive `.miz` discovery from the mission-library folder configured in Settings, with an explicit restart confirmation flow
+- GUI editing for common `Config\serverSettings.lua` options, including server identity, connection cap, port, mission lifecycle, integrity checks, exports, voice chat, and player permissions
+- password-safe, surgical Lua updates that preserve mission lists and unknown settings and create a timestamped backup before writing
 - working per-integration configuration for executable/config paths, URLs, and network endpoints
 - process and local-port status detection for SRS, Olympus, Tacview, and SkyEye, plus launch/restart controls where an executable is configured
 - Digital Kneeboard Simulator launch into its hosted sign-in page
@@ -29,6 +31,8 @@ Adapter work still required after DCS is installed:
 - test iframe headers for Olympus and Digital Kneeboard; use a host-side reverse proxy or new tab where framing is blocked
 
 The API currently returns `501 Not Implemented` for chat and moderation instead of claiming those actions succeeded. Mission selection is stored and the process is restarted, but the DCS WebGUI adapter must be completed before mission switching should be considered production-ready.
+
+The server configuration page's **Maximum players** value is DCS's global connection cap. The actual number and type of flyable aircraft slots are part of the selected `.miz` mission and must currently be changed in the DCS Mission Editor.
 
 ## Local UI preview
 

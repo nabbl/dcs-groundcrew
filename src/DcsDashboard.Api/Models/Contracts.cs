@@ -76,6 +76,63 @@ public sealed record FileSystemEntry(string Name, string FullPath, bool IsDirect
 public sealed record FileBrowserResult(string CurrentPath, string? ParentPath, IReadOnlyList<FileSystemEntry> Entries);
 public sealed record MissionFile(string Name, string FullPath, string RelativePath, long Size, DateTimeOffset Modified, bool Active);
 public sealed record MissionLibraryResult(string RootPath, bool Configured, bool Exists, IReadOnlyList<MissionFile> Missions);
+public sealed record DcsServerConfiguration(
+    string Path,
+    bool Exists,
+    DateTimeOffset? Modified,
+    string Name,
+    string Description,
+    bool PasswordConfigured,
+    int MaxPlayers,
+    int Port,
+    bool IsPublic,
+    string BindAddress,
+    bool ListLoop,
+    bool ListShuffle,
+    int ResumeMode,
+    int MaxPing,
+    bool RequirePureClients,
+    bool RequirePureScripts,
+    bool RequirePureTextures,
+    bool RequirePureModels,
+    bool AllowOwnshipExport,
+    bool AllowObjectExport,
+    bool AllowSensorExport,
+    bool AllowChangeSkin,
+    bool AllowChangeTailNumber,
+    bool VoiceChatServer,
+    bool AllowTrialOnlyClients,
+    bool AllowDynamicRadio,
+    bool AllowPlayersPool,
+    bool ServerCanScreenshot);
+public sealed record DcsServerConfigurationUpdate(
+    string Name,
+    string Description,
+    string? Password,
+    bool ClearPassword,
+    int MaxPlayers,
+    int Port,
+    bool IsPublic,
+    string BindAddress,
+    bool ListLoop,
+    bool ListShuffle,
+    int ResumeMode,
+    int MaxPing,
+    bool RequirePureClients,
+    bool RequirePureScripts,
+    bool RequirePureTextures,
+    bool RequirePureModels,
+    bool AllowOwnshipExport,
+    bool AllowObjectExport,
+    bool AllowSensorExport,
+    bool AllowChangeSkin,
+    bool AllowChangeTailNumber,
+    bool VoiceChatServer,
+    bool AllowTrialOnlyClients,
+    bool AllowDynamicRadio,
+    bool AllowPlayersPool,
+    bool ServerCanScreenshot);
+public sealed record DcsServerConfigurationSaveResult(DcsServerConfiguration Configuration, string? BackupPath);
 public sealed record MissionSwitchRequest(string Path);
 public sealed record ChatSendRequest(string Message);
 public sealed record ModerationRequest(string PlayerId, string? Reason);

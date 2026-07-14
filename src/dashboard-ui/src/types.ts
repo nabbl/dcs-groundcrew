@@ -109,3 +109,44 @@ export interface MissionLibraryResult {
   exists: boolean
   missions: MissionFile[]
 }
+
+export interface DcsServerConfiguration {
+  path: string
+  exists: boolean
+  modified: string | null
+  name: string
+  description: string
+  passwordConfigured: boolean
+  maxPlayers: number
+  port: number
+  isPublic: boolean
+  bindAddress: string
+  listLoop: boolean
+  listShuffle: boolean
+  resumeMode: number
+  maxPing: number
+  requirePureClients: boolean
+  requirePureScripts: boolean
+  requirePureTextures: boolean
+  requirePureModels: boolean
+  allowOwnshipExport: boolean
+  allowObjectExport: boolean
+  allowSensorExport: boolean
+  allowChangeSkin: boolean
+  allowChangeTailNumber: boolean
+  voiceChatServer: boolean
+  allowTrialOnlyClients: boolean
+  allowDynamicRadio: boolean
+  allowPlayersPool: boolean
+  serverCanScreenshot: boolean
+}
+
+export type DcsServerConfigurationUpdate = Omit<DcsServerConfiguration, 'path' | 'exists' | 'modified' | 'passwordConfigured'> & {
+  password: string | null
+  clearPassword: boolean
+}
+
+export interface DcsServerConfigurationSaveResult {
+  configuration: DcsServerConfiguration
+  backupPath: string | null
+}

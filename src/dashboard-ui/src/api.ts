@@ -1,4 +1,4 @@
-import type { DashboardSettings, DashboardSnapshot, FileBrowserResult, FileSystemEntry, MissionLibraryResult } from './types'
+import type { DashboardSettings, DashboardSnapshot, DcsServerConfiguration, DcsServerConfigurationSaveResult, DcsServerConfigurationUpdate, FileBrowserResult, FileSystemEntry, MissionLibraryResult } from './types'
 import { mockSnapshot } from './mockData'
 import { HubConnectionBuilder, HttpTransportType } from '@microsoft/signalr'
 
@@ -72,6 +72,27 @@ export async function getMissionLibrary(): Promise<MissionLibraryResult> {
   const response = await fetch('/api/missions')
   if (!response.ok) throw new Error('The configured mission folder cannot be read by Groundcrew.')
   return await response.json() as MissionLibraryResult
+}
+
+export async function getServerConfiguration(): Promise<DcsServerConfiguration> {
+  const response = await fetch('/api/server-config')
+  if (!response.ok) throw new Error('Groundcrew could not read Config\\serverSettings.lua.')
+  return await response.json() as DcsServerConfiguration
+}
+
+export async function saveServerConfiguration(update: DcsServerConfigurationUpdate): Promise<{ ok: boolean; result?: DcsServerConfigurationSaveResult; error?: string }> {
+  try {
+    const response = await fetch('/api/server-config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(update),
+    })
+    if (response.ok) return { ok: true, result: await response.json() as DcsServerConfigurationSaveResult }
+    const problem = await response.json().catch(() => null) as { error?: string; detail?: string } | null
+    return { ok: false, error: problem?.error ?? problem?.detail ?? 'Server configuration could not be saved.' }
+  } catch {
+    return { ok: false, error: 'The Groundcrew backend is not reachable.' }
+  }
 }
 
 export async function integrationAction(id: string, action: 'start' | 'stop' | 'restart'): Promise<{ ok: boolean; error?: string }> {

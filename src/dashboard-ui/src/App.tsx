@@ -6,15 +6,16 @@ import {
   Play, PlugZap, Power, Radio, RefreshCw, RotateCcw, Send, Server, Settings,
   ShieldAlert, Square, Users, X,
 } from 'lucide-react'
-import { browseServer, getMissionLibrary, getSettings, getSnapshot, integrationAction, saveSettings, sendChatMessage, serverAction, subscribeToSnapshots, switchMission } from './api'
-import { mockMissionLibrary, mockSettings, mockSnapshot } from './mockData'
-import type { DashboardSettings, DashboardSnapshot, FileBrowserResult, Integration, MissionLibraryResult, Player, ServerState } from './types'
+import { browseServer, getMissionLibrary, getServerConfiguration, getSettings, getSnapshot, integrationAction, saveServerConfiguration, saveSettings, sendChatMessage, serverAction, subscribeToSnapshots, switchMission } from './api'
+import { mockMissionLibrary, mockServerConfiguration, mockSettings, mockSnapshot } from './mockData'
+import type { DashboardSettings, DashboardSnapshot, DcsServerConfiguration, DcsServerConfigurationUpdate, FileBrowserResult, Integration, MissionLibraryResult, Player, ServerState } from './types'
 
-type Page = 'overview' | 'missions' | 'players' | 'integrations' | 'chat' | 'settings'
+type Page = 'overview' | 'missions' | 'serverConfig' | 'players' | 'integrations' | 'chat' | 'settings'
 
 const nav: { id: Page; label: string; icon: typeof Home }[] = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
   { id: 'missions', label: 'Missions', icon: FileArchive },
+  { id: 'serverConfig', label: 'Server config', icon: Server },
   { id: 'players', label: 'Players', icon: Users },
   { id: 'integrations', label: 'Integrations', icon: PlugZap },
   { id: 'chat', label: 'Server chat', icon: MessageSquareText },
@@ -162,6 +163,101 @@ function Missions({ settings, demoMode, onSwitch, onOpenSettings }: { settings: 
       </div>)}
     </div>
   </section>{browserOpen && <FileBrowserDialog title="Select mission file" initialPath={settings.missionLibraryPath || undefined} extension=".miz" onSelect={path => { setBrowserOpen(false); onSwitch(path) }} onClose={() => setBrowserOpen(false)} />}</>
+}
+
+function ConfigToggle({ label, detail, checked, onChange, caution = false }: { label: string; detail: string; checked: boolean; onChange: (checked: boolean) => void; caution?: boolean }) {
+  return <label className={`config-toggle ${caution ? 'caution' : ''}`}><span><strong>{label}</strong><small>{detail}</small></span><input type="checkbox" checked={checked} onChange={event => onChange(event.target.checked)} /><i /></label>
+}
+
+function ServerConfigurationPage({ demoMode, onOpenSettings }: { demoMode: boolean; onOpenSettings: () => void }) {
+  const [config, setConfig] = useState<DcsServerConfiguration | null>(demoMode ? mockServerConfiguration : null)
+  const [loading, setLoading] = useState(!demoMode)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [password, setPassword] = useState('')
+  const [clearPassword, setClearPassword] = useState(false)
+  const load = async () => {
+    if (demoMode) { setConfig(mockServerConfiguration); setLoading(false); return }
+    setLoading(true); setError('')
+    try { setConfig(await getServerConfiguration()) }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to read DCS server configuration.') }
+    finally { setLoading(false) }
+  }
+  useEffect(() => { void load() }, [demoMode])
+  const update = <K extends keyof DcsServerConfiguration>(key: K, value: DcsServerConfiguration[K]) => setConfig(current => current ? { ...current, [key]: value } : current)
+  const save = async () => {
+    if (!config) return
+    setSaving(true); setError(''); setNotice('')
+    const request = { ...config, password: password || null, clearPassword } as DcsServerConfigurationUpdate
+    if (demoMode) {
+      setConfig({ ...config, exists: true, modified: new Date().toISOString(), passwordConfigured: clearPassword ? false : password ? true : config.passwordConfigured })
+      setNotice('Preview saved. Restart DCS after changing the real file.'); setPassword(''); setClearPassword(false); setSaving(false); return
+    }
+    const response = await saveServerConfiguration(request)
+    if (!response.ok || !response.result) setError(response.error ?? 'Server configuration could not be saved.')
+    else {
+      setConfig(response.result.configuration); setPassword(''); setClearPassword(false)
+      setNotice(response.result.backupPath ? `Saved. Backup: ${response.result.backupPath}` : 'serverSettings.lua created. Restart DCS to apply it.')
+    }
+    setSaving(false)
+  }
+  if (loading) return <section className="panel page-panel"><div className="mission-empty"><RefreshCw className="spin" size={19} />Reading serverSettings.lua…</div></section>
+  if (!config) return <section className="panel page-panel"><div className="mission-empty error"><ShieldAlert size={19} />{error || 'Server configuration is unavailable.'}</div></section>
+  return <section className="panel page-panel server-config-page">
+    <header className="panel-header large"><div><span className="eyebrow">DCS DEDICATED SERVER</span><h1>Server configuration</h1><p>{config.path || 'Choose the DCS Saved Games directory before editing serverSettings.lua.'}</p></div><div className="save-area">{notice && <span>{notice}</span>}{error && <span className="error">{error}</span>}<button className="button ghost" disabled={loading} onClick={() => void load()}><RefreshCw size={15} /> Reload</button><button className="button primary" disabled={saving || !config.path} onClick={() => void save()}>{saving ? 'Saving…' : 'Save configuration'}</button></div></header>
+
+    {!config.path && <div className="config-banner error"><ShieldAlert size={18} /><div><strong>Saved Games path required</strong><span>Groundcrew derives this file as Saved Games\Config\serverSettings.lua.</span></div><button className="button outline" onClick={onOpenSettings}>Open settings</button></div>}
+    {config.path && !config.exists && <div className="config-banner"><FileArchive size={18} /><div><strong>serverSettings.lua does not exist yet</strong><span>Saving will create a valid base file and include the currently selected mission when one is configured.</span></div></div>}
+    <div className="config-banner info"><Users size={18} /><div><strong>Player cap versus aircraft slots</strong><span>Maximum players limits simultaneous connections. Flyable aircraft slots and roles are defined inside the selected .miz mission.</span></div></div>
+
+    <div className="server-config-grid">
+      <section className="server-config-section wide"><header><span>01</span><div><h2>Identity & access</h2><p>How the server appears in the multiplayer browser.</p></div></header><div className="server-form-grid">
+        <label className="server-field wide"><span>Server name</span><input value={config.name} maxLength={200} onChange={event => update('name', event.target.value)} /></label>
+        <label className="server-field wide"><span>Description</span><textarea value={config.description} maxLength={4000} rows={4} onChange={event => update('description', event.target.value)} /></label>
+        <label className="server-field"><span>New password</span><input type="password" value={password} maxLength={200} disabled={clearPassword} onChange={event => setPassword(event.target.value)} placeholder={config.passwordConfigured ? 'Leave blank to keep current password' : 'No password configured'} /></label>
+        <ConfigToggle label="Public server" detail="Publish this instance in the DCS multiplayer server list." checked={config.isPublic} onChange={value => update('isPublic', value)} />
+        {config.passwordConfigured && <ConfigToggle label="Remove password" detail="Clear the existing join password when saving." checked={clearPassword} onChange={setClearPassword} caution />}
+      </div></section>
+
+      <section className="server-config-section"><header><span>02</span><div><h2>Capacity & network</h2><p>Connection limits and the DCS game listener.</p></div></header><div className="server-form-grid">
+        <label className="server-field"><span>Maximum players</span><input type="number" min="1" max="256" value={config.maxPlayers} onChange={event => update('maxPlayers', Number(event.target.value))} /><small>Global player cap—not aircraft slots.</small></label>
+        <label className="server-field"><span>Game port</span><input type="number" min="1" max="65535" value={config.port} onChange={event => update('port', Number(event.target.value))} /><small>Default: 10308 TCP/UDP.</small></label>
+        <label className="server-field"><span>Bind address</span><input value={config.bindAddress} onChange={event => update('bindAddress', event.target.value)} placeholder="Blank = all interfaces" /></label>
+        <label className="server-field"><span>Maximum ping</span><input type="number" min="0" max="5000" value={config.maxPing} onChange={event => update('maxPing', Number(event.target.value))} /><small>Milliseconds; 0 disables the limit.</small></label>
+      </div></section>
+
+      <section className="server-config-section"><header><span>03</span><div><h2>Mission lifecycle</h2><p>When simulation resumes and how missions rotate.</p></div></header><div className="server-form-grid">
+        <label className="server-field wide"><span>Resume simulation</span><select value={config.resumeMode} onChange={event => update('resumeMode', Number(event.target.value))}><option value={0}>Manual</option><option value={1}>On mission load</option><option value={2}>When clients connect</option></select></label>
+        <ConfigToggle label="Loop mission list" detail="Return to the first mission after the list finishes." checked={config.listLoop} onChange={value => update('listLoop', value)} />
+        <ConfigToggle label="Shuffle mission list" detail="Choose the next configured mission randomly." checked={config.listShuffle} onChange={value => update('listShuffle', value)} />
+      </div></section>
+
+      <section className="server-config-section"><header><span>04</span><div><h2>Integrity checks</h2><p>Require matching client content for fair multiplayer.</p></div></header><div className="toggle-stack">
+        <ConfigToggle label="Pure clients" detail="Enable DCS client integrity checking." checked={config.requirePureClients} onChange={value => update('requirePureClients', value)} />
+        <ConfigToggle label="Pure scripts" detail="Require protected script files to match." checked={config.requirePureScripts} onChange={value => update('requirePureScripts', value)} />
+        <ConfigToggle label="Pure textures" detail="Require protected textures to match." checked={config.requirePureTextures} onChange={value => update('requirePureTextures', value)} />
+        <ConfigToggle label="Pure models" detail="Require protected 3D models to match." checked={config.requirePureModels} onChange={value => update('requirePureModels', value)} />
+      </div></section>
+
+      <section className="server-config-section"><header><span>05</span><div><h2>Data exports</h2><p>Control telemetry available to client-side tools.</p></div></header><div className="toggle-stack">
+        <ConfigToggle label="Ownship export" detail="Allow clients to export their own aircraft data." checked={config.allowOwnshipExport} onChange={value => update('allowOwnshipExport', value)} />
+        <ConfigToggle label="Object export" detail="Allow export of world-object information." checked={config.allowObjectExport} onChange={value => update('allowObjectExport', value)} caution />
+        <ConfigToggle label="Sensor export" detail="Allow export of aircraft sensor information." checked={config.allowSensorExport} onChange={value => update('allowSensorExport', value)} caution />
+      </div></section>
+
+      <section className="server-config-section wide"><header><span>06</span><div><h2>Player capabilities & services</h2><p>Convenience options exposed by modern DCS server builds.</p></div></header><div className="toggle-grid">
+        <ConfigToggle label="Change livery" detail="Allow players to select aircraft skins." checked={config.allowChangeSkin} onChange={value => update('allowChangeSkin', value)} />
+        <ConfigToggle label="Change tail number" detail="Allow editable aircraft tail numbers." checked={config.allowChangeTailNumber} onChange={value => update('allowChangeTailNumber', value)} />
+        <ConfigToggle label="DCS voice chat" detail="Enable the built-in DCS voice-chat server." checked={config.voiceChatServer} onChange={value => update('voiceChatServer', value)} />
+        <ConfigToggle label="Trial-only clients" detail="Allow clients using only trial modules." checked={config.allowTrialOnlyClients} onChange={value => update('allowTrialOnlyClients', value)} />
+        <ConfigToggle label="Dynamic radio" detail="Enable dynamic radio support when available." checked={config.allowDynamicRadio} onChange={value => update('allowDynamicRadio', value)} />
+        <ConfigToggle label="Players pool" detail="Enable the shared player-slot pool behavior." checked={config.allowPlayersPool} onChange={value => update('allowPlayersPool', value)} />
+        <ConfigToggle label="Server screenshots" detail="Allow the server to request client screenshots." checked={config.serverCanScreenshot} onChange={value => update('serverCanScreenshot', value)} caution />
+      </div></section>
+    </div>
+    <footer className="server-config-footer"><ShieldAlert size={16} /><span>Groundcrew preserves unrecognized Lua settings and creates a timestamped backup before every update. Restart DCS after saving so the new configuration is loaded.</span></footer>
+  </section>
 }
 
 function Players({ players }: { players: Player[] }) {
@@ -339,6 +435,7 @@ export default function App() {
         <div className="page-content">
           {page === 'overview' && <Overview data={data} onNavigate={setPage} />}
           {page === 'missions' && <Missions settings={settings} demoMode={data.demoMode} onSwitch={value => setPending({ kind: 'mission', value })} onOpenSettings={() => setPage('settings')} />}
+          {page === 'serverConfig' && <ServerConfigurationPage demoMode={data.demoMode} onOpenSettings={() => setPage('settings')} />}
           {page === 'players' && <Players players={data.players} />}
           {page === 'integrations' && <Integrations integrations={data.integrations} settings={settings} onSaveSettings={persistSettings} onRefresh={refreshSnapshot} />}
           {page === 'chat' && <Chat data={data} />}
