@@ -51,6 +51,7 @@ Every push to `main`, pull request, and manual workflow run builds a Windows x64
 
 The MSI:
 
+- shows a standard setup wizard with installation progress and visible error messages
 - installs Groundcrew under `C:\Program Files\Groundcrew`
 - registers and starts the `DcsGroundcrew` Windows service
 - adds an **Open Groundcrew** Start Menu shortcut
@@ -59,6 +60,12 @@ The MSI:
 - stores the SQLite database under `C:\ProgramData\Groundcrew` so upgrades preserve the configuration
 
 The generated MSI is currently unsigned, so Windows may display an unknown-publisher warning. Production signing can be added once a code-signing certificate is available.
+
+If setup fails, it now creates a verbose `MSI*.log` file in `%TEMP%`. You can also choose an explicit log path from an elevated PowerShell window:
+
+```powershell
+msiexec.exe /i ".\Groundcrew-<version>-win-x64.msi" /L*V ".\Groundcrew-install.log"
+```
 
 ### Manual service deployment
 

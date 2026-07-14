@@ -63,6 +63,7 @@ jobs:
         run: |
           dotnet tool install --global wix --version 6.0.2
           wix extension add -g WixToolset.Firewall.wixext/6.0.2
+          wix extension add -g WixToolset.UI.wixext/6.0.2
           wix extension add -g WixToolset.Util.wixext/6.0.2
 
       - name: Build MSI
@@ -75,7 +76,9 @@ jobs:
               -d "PublishDir=$publishDir" `
               -d "Version=$env:BUILD_VERSION" `
               -ext WixToolset.Firewall.wixext `
+              -ext WixToolset.UI.wixext `
               -ext WixToolset.Util.wixext `
+              -culture en-US `
               -pdbtype none `
               -out "artifacts/installer/Groundcrew-$env:BUILD_VERSION-win-x64.msi" 2>&1
           $wixExitCode = $LASTEXITCODE
