@@ -1,0 +1,9 @@
+{
+  "name": "dcs-groundcrew",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix src/dashboard-ui run dev",
+    "build": "npm --prefix src/dashboard-ui run build",
+    "preview": "npm --prefix src/dashboard-ui run preview"
+  }
+}

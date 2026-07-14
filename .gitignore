@@ -1,0 +1,13 @@
+node_modules/
+dist/
+bin/
+obj/
+.DS_Store
+*.db
+*.db-shm
+*.db-wal
+data/
+.env
+*.tsbuildinfo
+src/dashboard-ui/vite.config.js
+src/dashboard-ui/vite.config.d.ts
