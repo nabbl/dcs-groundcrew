@@ -76,6 +76,29 @@ public sealed record FileSystemEntry(string Name, string FullPath, bool IsDirect
 public sealed record FileBrowserResult(string CurrentPath, string? ParentPath, IReadOnlyList<FileSystemEntry> Entries);
 public sealed record MissionFile(string Name, string FullPath, string RelativePath, long Size, DateTimeOffset Modified, bool Active);
 public sealed record MissionLibraryResult(string RootPath, bool Configured, bool Exists, IReadOnlyList<MissionFile> Missions);
+public sealed record MissionSlotSummary(string Airframe, string Coalition, int Count);
+public sealed record MissionDependency(string Name, string Kind, string Status);
+public sealed record MissionReadinessCheck(string Severity, string Title, string Detail);
+public sealed record MissionReadinessReport(
+    string Path,
+    string Hash,
+    bool Readable,
+    string Status,
+    string Title,
+    string Theatre,
+    string MissionDate,
+    string StartTime,
+    string Weather,
+    long Size,
+    DateTimeOffset Modified,
+    int TotalSlots,
+    int BlueSlots,
+    int RedSlots,
+    int NeutralSlots,
+    IReadOnlyList<MissionSlotSummary> Slots,
+    IReadOnlyList<MissionDependency> Dependencies,
+    IReadOnlyList<string> Frameworks,
+    IReadOnlyList<MissionReadinessCheck> Checks);
 public sealed record DcsServerConfiguration(
     string Path,
     bool Exists,

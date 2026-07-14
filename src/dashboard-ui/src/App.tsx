@@ -4,11 +4,11 @@ import {
   FileArchive, FolderCog, Gauge, HardDrive, Headphones, Home, LayoutDashboard,
   MemoryStick, MessageSquareText, MoreHorizontal, Network, PanelLeftClose, PanelLeftOpen,
   Play, PlugZap, Power, Radio, RefreshCw, RotateCcw, Send, Server, Settings,
-  ShieldAlert, Square, Users, X,
+  ShieldAlert, Square, Users, X, Info,
 } from 'lucide-react'
-import { browseServer, getMissionLibrary, getServerConfiguration, getSettings, getSnapshot, integrationAction, saveServerConfiguration, saveSettings, sendChatMessage, serverAction, subscribeToSnapshots, switchMission } from './api'
-import { mockMissionLibrary, mockServerConfiguration, mockSettings, mockSnapshot } from './mockData'
-import type { DashboardSettings, DashboardSnapshot, DcsServerConfiguration, DcsServerConfigurationUpdate, FileBrowserResult, Integration, MissionLibraryResult, Player, ServerState } from './types'
+import { browseServer, getMissionLibrary, getServerConfiguration, getSettings, getSnapshot, inspectMission, integrationAction, saveServerConfiguration, saveSettings, sendChatMessage, serverAction, subscribeToSnapshots, switchMission } from './api'
+import { mockMissionLibrary, mockMissionReadiness, mockServerConfiguration, mockSettings, mockSnapshot } from './mockData'
+import type { DashboardSettings, DashboardSnapshot, DcsServerConfiguration, DcsServerConfigurationUpdate, FileBrowserResult, Integration, MissionFile, MissionLibraryResult, MissionReadinessReport, Player, ServerState } from './types'
 
 type Page = 'overview' | 'missions' | 'serverConfig' | 'players' | 'integrations' | 'chat' | 'settings'
 
@@ -134,8 +134,9 @@ function Overview({ data, onNavigate }: { data: DashboardSnapshot; onNavigate: (
   )
 }
 
-function Missions({ settings, demoMode, onSwitch, onOpenSettings }: { settings: DashboardSettings; demoMode: boolean; onSwitch: (mission: string) => void; onOpenSettings: () => void }) {
+function Missions({ settings, demoMode, olympusUrl, onSwitch, onOpenSettings }: { settings: DashboardSettings; demoMode: boolean; olympusUrl?: string; onSwitch: (mission: string) => void; onOpenSettings: () => void }) {
   const [browserOpen, setBrowserOpen] = useState(false)
+  const [inspecting, setInspecting] = useState<MissionFile | null>(null)
   const [library, setLibrary] = useState<MissionLibraryResult | null>(demoMode ? mockMissionLibrary : null)
   const [loading, setLoading] = useState(!demoMode)
   const [error, setError] = useState('')
@@ -159,10 +160,35 @@ function Missions({ settings, demoMode, onSwitch, onOpenSettings }: { settings: 
       {!loading && !error && library?.configured && !library.exists && <div className="mission-empty error"><ShieldAlert size={18} /><strong>Mission folder not found</strong><span>{library.rootPath}</span><button className="button outline" onClick={onOpenSettings}>Change folder</button></div>}
       {!loading && !error && library?.exists && library.missions.length === 0 && <div className="mission-empty"><FileArchive size={20} /><strong>No .miz files found</strong><span>{library.rootPath}</span></div>}
       {!loading && !error && library?.missions.map(m => <div className={`mission-row ${m.active ? 'active' : ''}`} key={m.fullPath}>
-        <span className="file-mark"><FileArchive size={19} /></span><div><strong>{m.name}</strong><small>{m.active ? 'Currently selected' : m.relativePath}</small></div><span>{m.relativePath.split(/[\\/]/).length > 1 ? m.relativePath.split(/[\\/]/).slice(0, -1).join('\\') : 'Root'}</span><span>{formatModified(m.modified)}</span><span>{formatSize(m.size)}</span><button className={m.active ? 'button ghost' : 'button outline'} disabled={m.active} onClick={() => onSwitch(m.fullPath)}>{m.active ? 'Active' : 'Load mission'}</button>
+        <span className="file-mark"><FileArchive size={19} /></span><div><strong>{m.name}</strong><small>{m.active ? 'Currently selected' : m.relativePath}</small></div><span>{m.relativePath.split(/[\\/]/).length > 1 ? m.relativePath.split(/[\\/]/).slice(0, -1).join('\\') : 'Root'}</span><span>{formatModified(m.modified)}</span><span>{formatSize(m.size)}</span><div className="mission-actions"><button className="button ghost" onClick={() => setInspecting(m)}>Details</button><button className={m.active ? 'button ghost' : 'button outline'} disabled={m.active} onClick={() => onSwitch(m.fullPath)}>{m.active ? 'Active' : 'Load'}</button></div>
       </div>)}
     </div>
-  </section>{browserOpen && <FileBrowserDialog title="Select mission file" initialPath={settings.missionLibraryPath || undefined} extension=".miz" onSelect={path => { setBrowserOpen(false); onSwitch(path) }} onClose={() => setBrowserOpen(false)} />}</>
+  </section>{browserOpen && <FileBrowserDialog title="Select mission file" initialPath={settings.missionLibraryPath || undefined} extension=".miz" onSelect={path => { setBrowserOpen(false); onSwitch(path) }} onClose={() => setBrowserOpen(false)} />}{inspecting && <MissionReadinessDrawer mission={inspecting} demoMode={demoMode} olympusUrl={olympusUrl} onClose={() => setInspecting(null)} />}</>
+}
+
+function MissionReadinessDrawer({ mission, demoMode, olympusUrl, onClose }: { mission: MissionFile; demoMode: boolean; olympusUrl?: string; onClose: () => void }) {
+  const [report, setReport] = useState<MissionReadinessReport | null>(demoMode ? { ...mockMissionReadiness, path: mission.fullPath, title: mission.name, size: mission.size, modified: mission.modified } : null)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    if (demoMode) return
+    setReport(null); setError('')
+    void inspectMission(mission.fullPath).then(setReport).catch(reason => setError(reason instanceof Error ? reason.message : 'Mission inspection failed.'))
+  }, [mission.fullPath, demoMode])
+  const checkIcon = (severity: string) => severity === 'pass' ? <Activity size={15} /> : severity === 'info' ? <Info size={15} /> : <ShieldAlert size={15} />
+  return <div className="readiness-backdrop" role="presentation" onMouseDown={onClose}><aside className="readiness-drawer" role="dialog" aria-modal="true" aria-label={`Mission readiness for ${mission.name}`} onMouseDown={event => event.stopPropagation()}>
+    <header><div><span className="eyebrow">READ-ONLY MIZ SUMMARY</span><h2>{report?.title ?? mission.name}</h2><p>{mission.relativePath}</p></div><button className="icon-button" onClick={onClose} aria-label="Close mission details"><X size={20} /></button></header>
+    {!report && !error && <div className="readiness-loading"><RefreshCw className="spin" size={20} />Inspecting mission archive…</div>}
+    {error && <div className="readiness-loading error"><ShieldAlert size={20} />{error}</div>}
+    {report && <div className="readiness-content">
+      <div className={`readiness-status ${report.status}`}><span>{report.status === 'ready' ? <Activity size={17} /> : <ShieldAlert size={17} />}</span><div><strong>{report.status === 'ready' ? 'Ready for review' : report.status === 'warning' ? 'Review recommended' : 'Attention required'}</strong><small>Archive {report.readable ? 'read successfully' : 'could not be read'} · SHA-256 {report.hash.slice(0, 10)}</small></div></div>
+      <section className="readiness-facts"><div><span>Theatre</span><strong>{report.theatre}</strong></div><div><span>Date</span><strong>{report.missionDate}</strong></div><div><span>Start</span><strong>{report.startTime}</strong></div><div className="wide"><span>Weather</span><strong>{report.weather}</strong></div></section>
+      <section className="readiness-section"><header><div><span className="eyebrow">STATIC CLIENT / PLAYER UNITS</span><h3>Flyable slots</h3></div><strong className="slot-total">{report.totalSlots}</strong></header><div className="coalition-totals"><span className="blue">Blue <strong>{report.blueSlots}</strong></span><span className="red">Red <strong>{report.redSlots}</strong></span>{report.neutralSlots > 0 && <span>Neutral <strong>{report.neutralSlots}</strong></span>}</div><div className="slot-list">{report.slots.map(slot => <div key={`${slot.coalition}-${slot.airframe}`}><span className={`coalition ${slot.coalition.toLowerCase()}`}>{slot.coalition.slice(0, 1)}</span><strong>{slot.airframe}</strong><b>{slot.count}</b></div>)}{report.slots.length === 0 && <p>No static flyable slots detected.</p>}</div></section>
+      <section className="readiness-section"><header><div><span className="eyebrow">DECLARED & DETECTED</span><h3>Dependencies</h3></div></header><div className="dependency-list">{report.dependencies.map(item => <span className={item.status} key={`${item.kind}-${item.name}`}><small>{item.kind}</small>{item.name}<i>{item.status}</i></span>)}{report.dependencies.length === 0 && <p>No declared dependencies found.</p>}</div>{report.frameworks.length > 0 && <div className="framework-list"><small>Recognized scripts</small><div>{report.frameworks.map(name => <span key={name}>{name}</span>)}</div></div>}</section>
+      <section className="readiness-section"><header><div><span className="eyebrow">OPERATIONAL REVIEW</span><h3>Checks</h3></div></header><div className="readiness-checks">{report.checks.map(check => <div className={check.severity} key={`${check.severity}-${check.title}`}><span>{checkIcon(check.severity)}</span><div><strong>{check.title}</strong><p>{check.detail}</p></div></div>)}</div></section>
+      <p className="readiness-note">Slot totals cover static Client and Player units. Runtime scripts can add behavior Groundcrew cannot determine without executing mission code.</p>
+    </div>}
+    <footer><button className="button ghost" onClick={onClose}>Close</button>{olympusUrl && <a className="button outline" href={olympusUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} /> Open in Olympus</a>}</footer>
+  </aside></div>
 }
 
 function ConfigToggle({ label, detail, checked, onChange, caution = false }: { label: string; detail: string; checked: boolean; onChange: (checked: boolean) => void; caution?: boolean }) {
@@ -434,7 +460,7 @@ export default function App() {
         <header className="topbar"><div><span>GROUNDCREW</span><strong>{title}</strong></div><div className="topbar-meta">{data.demoMode && <span className="demo-badge">PREVIEW DATA</span>}<span><StateDot state={data.server.state} /> Host connected</span><span>14:38 CEST</span></div></header>
         <div className="page-content">
           {page === 'overview' && <Overview data={data} onNavigate={setPage} />}
-          {page === 'missions' && <Missions settings={settings} demoMode={data.demoMode} onSwitch={value => setPending({ kind: 'mission', value })} onOpenSettings={() => setPage('settings')} />}
+          {page === 'missions' && <Missions settings={settings} demoMode={data.demoMode} olympusUrl={olympus?.url ?? settings.integrations.find(item => item.id === 'olympus')?.url} onSwitch={value => setPending({ kind: 'mission', value })} onOpenSettings={() => setPage('settings')} />}
           {page === 'serverConfig' && <ServerConfigurationPage demoMode={data.demoMode} onOpenSettings={() => setPage('settings')} />}
           {page === 'players' && <Players players={data.players} />}
           {page === 'integrations' && <Integrations integrations={data.integrations} settings={settings} onSaveSettings={persistSettings} onRefresh={refreshSnapshot} />}

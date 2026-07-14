@@ -1,4 +1,4 @@
-import type { DashboardSettings, DashboardSnapshot, DcsServerConfiguration, MissionLibraryResult } from './types'
+import type { DashboardSettings, DashboardSnapshot, DcsServerConfiguration, MissionLibraryResult, MissionReadinessReport } from './types'
 
 export const mockSettings: DashboardSettings = {
   serverName: 'DCS SERVER ONE',
@@ -26,6 +26,43 @@ export const mockMissionLibrary: MissionLibraryResult = {
     { name: 'Operation Enduring Resolve v4.2', fullPath: mockSettings.activeMissionPath, relativePath: 'Operation Enduring Resolve v4.2.miz', size: 48_200_000, modified: '2026-07-14T09:42:00Z', active: true },
     { name: 'Flashpoint Levant — Dawn', fullPath: 'D:\\DCS\\Missions\\Flashpoint Levant — Dawn.miz', relativePath: 'Flashpoint Levant — Dawn.miz', size: 36_700_000, modified: '2026-07-12T14:12:00Z', active: false },
     { name: 'Caucasus Training Range', fullPath: 'D:\\DCS\\Missions\\Training\\Caucasus Training Range.miz', relativePath: 'Training\\Caucasus Training Range.miz', size: 12_400_000, modified: '2026-07-08T18:05:00Z', active: false },
+  ],
+}
+
+export const mockMissionReadiness: MissionReadinessReport = {
+  path: mockSettings.activeMissionPath,
+  hash: 'e8d66d2e9ab36de9f40dfda6a42614cf86e30b7b5c6f287207ad267cead51c80',
+  readable: true,
+  status: 'warning',
+  title: 'Operation Enduring Resolve v4.2',
+  theatre: 'Syria',
+  missionDate: '14 Jul 2026',
+  startTime: '06:30',
+  weather: '27 °C · wind 4 m/s at 275° · scattered clouds',
+  size: 48_200_000,
+  modified: '2026-07-14T09:42:00Z',
+  totalSlots: 36,
+  blueSlots: 28,
+  redSlots: 8,
+  neutralSlots: 0,
+  slots: [
+    { airframe: 'F-16C_50', coalition: 'Blue', count: 12 },
+    { airframe: 'FA-18C_hornet', coalition: 'Blue', count: 8 },
+    { airframe: 'AH-64D_BLK_II', coalition: 'Blue', count: 8 },
+    { airframe: 'MiG-29A', coalition: 'Red', count: 4 },
+    { airframe: 'Mi-24P', coalition: 'Red', count: 4 },
+  ],
+  dependencies: [
+    { name: 'Syria', kind: 'Terrain', status: 'available' },
+    { name: 'F-16C', kind: 'Module', status: 'declared' },
+    { name: 'AH-64D', kind: 'Module', status: 'declared' },
+  ],
+  frameworks: ['MOOSE', 'CTLD', 'CSAR', 'Olympus'],
+  checks: [
+    { severity: 'pass', title: 'Static slots found', detail: '36 Client or Player units were found in the mission data.' },
+    { severity: 'warning', title: 'Player cap below slot count', detail: 'The mission exposes 36 static slots while serverSettings.lua allows 32 players.' },
+    { severity: 'pass', title: 'Terrain available', detail: 'Syria was found in the configured DCS installation.' },
+    { severity: 'info', title: 'Declared modules', detail: 'Additional modules are listed without treating every declaration as a hard client requirement.' },
   ],
 }
 

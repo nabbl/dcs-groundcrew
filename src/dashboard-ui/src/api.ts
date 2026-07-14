@@ -1,4 +1,4 @@
-import type { DashboardSettings, DashboardSnapshot, DcsServerConfiguration, DcsServerConfigurationSaveResult, DcsServerConfigurationUpdate, FileBrowserResult, FileSystemEntry, MissionLibraryResult } from './types'
+import type { DashboardSettings, DashboardSnapshot, DcsServerConfiguration, DcsServerConfigurationSaveResult, DcsServerConfigurationUpdate, FileBrowserResult, FileSystemEntry, MissionLibraryResult, MissionReadinessReport } from './types'
 import { mockSnapshot } from './mockData'
 import { HubConnectionBuilder, HttpTransportType } from '@microsoft/signalr'
 
@@ -72,6 +72,15 @@ export async function getMissionLibrary(): Promise<MissionLibraryResult> {
   const response = await fetch('/api/missions')
   if (!response.ok) throw new Error('The configured mission folder cannot be read by Groundcrew.')
   return await response.json() as MissionLibraryResult
+}
+
+export async function inspectMission(path: string): Promise<MissionReadinessReport> {
+  const response = await fetch(`/api/missions/inspect?path=${encodeURIComponent(path)}`)
+  if (!response.ok) {
+    const problem = await response.json().catch(() => null) as { error?: string; detail?: string } | null
+    throw new Error(problem?.error ?? problem?.detail ?? 'Groundcrew could not inspect this mission.')
+  }
+  return await response.json() as MissionReadinessReport
 }
 
 export async function getServerConfiguration(): Promise<DcsServerConfiguration> {

@@ -14,6 +14,7 @@ Working now:
 - SQLite-backed host configuration
 - server-side Windows file browser for executables, Saved Games, missions, and Tacview recordings
 - recursive `.miz` discovery from the mission-library folder configured in Settings, with an explicit restart confirmation flow
+- cached, read-only `.miz` readiness summaries for theatre, date/time, weather, static flyable slots, declared dependencies, recognized script frameworks, archive integrity, and server-cap mismatches
 - GUI editing for common `Config\serverSettings.lua` options, including server identity, connection cap, port, mission lifecycle, integrity checks, exports, voice chat, and player permissions
 - password-safe, surgical Lua updates that preserve mission lists and unknown settings and create a timestamped backup before writing
 - working per-integration configuration for executable/config paths, URLs, and network endpoints
@@ -32,7 +33,7 @@ Adapter work still required after DCS is installed:
 
 The API currently returns `501 Not Implemented` for chat and moderation instead of claiming those actions succeeded. Mission selection is stored and the process is restarted, but the DCS WebGUI adapter must be completed before mission switching should be considered production-ready.
 
-The server configuration page's **Maximum players** value is DCS's global connection cap. The actual number and type of flyable aircraft slots are part of the selected `.miz` mission and must currently be changed in the DCS Mission Editor.
+The server configuration page's **Maximum players** value is DCS's global connection cap. Groundcrew can summarize static Client and Player slots from each `.miz`, but changing those slots remains a DCS Mission Editor task. Runtime scripts may create behavior that cannot be determined safely without executing mission code, so Groundcrew reports recognized frameworks without trying to emulate Olympus or DCS itself.
 
 ## Local UI preview
 

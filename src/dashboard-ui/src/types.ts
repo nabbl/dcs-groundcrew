@@ -110,6 +110,28 @@ export interface MissionLibraryResult {
   missions: MissionFile[]
 }
 
+export interface MissionReadinessReport {
+  path: string
+  hash: string
+  readable: boolean
+  status: 'ready' | 'warning' | 'error'
+  title: string
+  theatre: string
+  missionDate: string
+  startTime: string
+  weather: string
+  size: number
+  modified: string
+  totalSlots: number
+  blueSlots: number
+  redSlots: number
+  neutralSlots: number
+  slots: Array<{ airframe: string; coalition: 'Blue' | 'Red' | 'Neutral'; count: number }>
+  dependencies: Array<{ name: string; kind: string; status: 'available' | 'missing' | 'unknown' | 'declared' }>
+  frameworks: string[]
+  checks: Array<{ severity: 'pass' | 'warning' | 'error' | 'info'; title: string; detail: string }>
+}
+
 export interface DcsServerConfiguration {
   path: string
   exists: boolean

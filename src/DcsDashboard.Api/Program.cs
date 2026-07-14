@@ -23,6 +23,7 @@ builder.Services.AddSingleton<DcsProcessService>();
 builder.Services.AddSingleton<HostMetricsService>();
 builder.Services.AddSingleton<IntegrationService>();
 builder.Services.AddSingleton<DcsServerConfigurationService>();
+builder.Services.AddSingleton<MissionReadinessService>();
 builder.Services.AddScoped<SnapshotService>();
 builder.Services.AddHostedService<SnapshotBroadcastService>();
 
@@ -73,6 +74,14 @@ app.MapGet("/api/missions", async (SettingsStore store) =>
         return Results.Ok(new MissionLibraryResult(root, true, true, missions));
     }
     catch (UnauthorizedAccessException) { return Results.Problem("The dashboard service account cannot read the configured mission library.", statusCode: 403); }
+});
+app.MapGet("/api/missions/inspect", async (string path, MissionReadinessService service) =>
+{
+    try { return Results.Ok(await service.InspectAsync(path)); }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (FileNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
+    catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
+    catch (UnauthorizedAccessException ex) { return Results.Problem(ex.Message, statusCode: 403); }
 });
 
 app.MapGet("/api/files/roots", () => Results.Ok(DriveInfo.GetDrives().Where(d => d.IsReady).Select(d => new FileSystemEntry(d.Name, d.RootDirectory.FullName, true, null, DateTimeOffset.MinValue))));
