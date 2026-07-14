@@ -70,14 +70,35 @@ jobs:
         run: |
           New-Item artifacts/installer -ItemType Directory -Force | Out-Null
           $publishDir = (Resolve-Path "artifacts/publish").Path
-          wix build installer/Package.wxs `
-            -arch x64 `
-            -d "PublishDir=$publishDir" `
-            -d "Version=$env:BUILD_VERSION" `
-            -ext WixToolset.Firewall.wixext `
-            -ext WixToolset.Util.wixext `
-            -pdbtype none `
-            -out "artifacts/installer/Groundcrew-$env:BUILD_VERSION-win-x64.msi"
+          $wixOutput = & wix build installer/Package.wxs `
+              -arch x64 `
+              -d "PublishDir=$publishDir" `
+              -d "Version=$env:BUILD_VERSION" `
+              -ext WixToolset.Firewall.wixext `
+              -ext WixToolset.Util.wixext `
+              -pdbtype none `
+              -out "artifacts/installer/Groundcrew-$env:BUILD_VERSION-win-x64.msi" 2>&1
+          $wixExitCode = $LASTEXITCODE
+          $wixOutput | Tee-Object -FilePath artifacts/installer/wix-build.log
+
+          if ($wixExitCode -ne 0) {
+            $diagnostics = $wixOutput | Where-Object { "$_" -match '(?i)error|exception|failed' }
+            if (-not $diagnostics) { $diagnostics = $wixOutput }
+            $diagnostics | Select-Object -First 20 | ForEach-Object {
+              $message = "$_".Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+              Write-Host "::error title=WiX build failed::$message"
+            }
+            exit $wixExitCode
+          }
+
+      - name: Upload WiX diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: groundcrew-wix-diagnostics-${{ github.run_number }}
+          path: artifacts/installer/wix-build.log
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Create checksum
         shell: pwsh
