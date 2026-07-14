@@ -93,7 +93,7 @@ jobs:
 
       - name: Upload WiX diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: groundcrew-wix-diagnostics-${{ github.run_number }}
           path: artifacts/installer/wix-build.log
@@ -108,7 +108,7 @@ jobs:
           "$hash  $($msi.Name)" | Set-Content "artifacts/installer/$($msi.Name).sha256"
 
       - name: Upload MSI artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: groundcrew-windows-installer-${{ github.run_number }}
           path: |

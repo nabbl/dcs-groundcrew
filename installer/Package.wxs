@@ -23,11 +23,9 @@
               Id="GroundcrewTailscaleFirewall"
               Name="Groundcrew (Tailscale)"
               Description="Allows access to the Groundcrew dashboard from Tailscale peers."
-              File="GroundcrewExecutable"
               Port="5080"
               Protocol="tcp"
-              Profile="all"
-              Scope="any">
+              Profile="all">
               <firewall:RemoteAddress Value="100.64.0.0/10" />
             </firewall:FirewallException>
           </File>
@@ -76,4 +74,3 @@
     </StandardDirectory>
   </Package>
 </Wix>
-
