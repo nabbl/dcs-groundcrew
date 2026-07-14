@@ -13,6 +13,15 @@
     <SummaryInformation Description="DCS server operations dashboard" />
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
     <Property Id="MsiLogging" Value="voicewarmupx" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Open Groundcrew" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+    <Property Id="WixUnelevatedShellExecTarget" Value="[#GroundcrewExecutable]" />
+    <CustomAction
+      Id="LaunchGroundcrew"
+      BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)"
+      DllEntry="WixUnelevatedShellExec"
+      Execute="immediate"
+      Return="ignore" />
 
     <UI Id="GroundcrewInstallUI">
       <TextStyle Id="WixUI_Font_Normal" FaceName="Segoe UI" Size="9" />
@@ -32,6 +41,7 @@
       <DialogRef Id="ResumeDlg" />
       <DialogRef Id="UserExit" />
 
+      <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchGroundcrew" Order="1" Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed" />
       <Publish Dialog="ExitDialog" Control="Finish" Event="EndDialog" Value="Return" Order="999" />
 
       <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="InstallDirDlg" Condition="NOT Installed" />
@@ -65,7 +75,7 @@
       <Directory Id="INSTALLFOLDER" Name="Groundcrew">
         <Component Id="GroundcrewServiceComponent" Guid="*">
           <File Id="GroundcrewExecutable"
-                Source="$(PublishDir)\DcsDashboard.Api.exe"
+                Source="$(PublishDir)\Groundcrew.exe"
                 KeyPath="yes">
             <firewall:FirewallException
               Id="GroundcrewTailscaleFirewall"
@@ -84,7 +94,8 @@
             Description="DCS server operations dashboard and companion-service control plane."
             Type="ownProcess"
             Start="auto"
-            ErrorControl="normal" />
+            ErrorControl="normal"
+            Arguments="--service" />
           <ServiceControl
             Id="GroundcrewServiceControl"
             Name="DcsGroundcrew"
@@ -95,7 +106,7 @@
         </Component>
 
         <Files Include="$(PublishDir)\**">
-          <Exclude Files="$(PublishDir)\DcsDashboard.Api.exe" />
+          <Exclude Files="$(PublishDir)\Groundcrew.exe" />
           <Exclude Files="$(PublishDir)\**\*.pdb" />
         </Files>
       </Directory>
@@ -104,16 +115,17 @@
     <StandardDirectory Id="ProgramMenuFolder">
       <Directory Id="GroundcrewProgramMenuFolder" Name="Groundcrew">
         <Component Id="GroundcrewStartMenuComponent" Guid="*">
-          <util:InternetShortcut
+          <Shortcut
             Id="GroundcrewDashboardShortcut"
-            Name="Open Groundcrew"
-            Target="http://127.0.0.1:5080"
-            Type="url" />
+            Name="Groundcrew"
+            Description="Open the Groundcrew DCS server dashboard"
+            Target="[INSTALLFOLDER]Groundcrew.exe"
+            WorkingDirectory="INSTALLFOLDER" />
           <RemoveFolder Id="RemoveGroundcrewProgramMenuFolder" On="uninstall" />
           <RegistryValue
             Root="HKLM"
             Key="Software\nabbl\Groundcrew"
-            Name="StartMenuShortcut"
+            Name="GroundcrewShortcut"
             Type="integer"
             Value="1"
             KeyPath="yes" />

@@ -10,13 +10,13 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ServiceName = "DcsGroundcrew"
-$Executable = Join-Path $InstallDirectory "DcsDashboard.Api.exe"
+$Executable = Join-Path $InstallDirectory "Groundcrew.exe"
 
 if (-not (Test-Path $Executable)) {
-    throw "DcsDashboard.Api.exe was not found in $InstallDirectory. Run publish-windows.ps1 first."
+    throw "Groundcrew.exe was not found in $InstallDirectory. Run publish-windows.ps1 first."
 }
 
-$BinaryPath = "`"$Executable`" --urls `"http://${TailscaleIp}:$Port`""
+$BinaryPath = "`"$Executable`" --service --urls `"http://${TailscaleIp}:$Port`""
 $Existing = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if ($Existing) {
     Stop-Service $ServiceName -ErrorAction SilentlyContinue

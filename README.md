@@ -40,7 +40,7 @@ The UI uses preview data if the backend is unavailable. Start the API separately
 
 ```powershell
 cd src/DcsDashboard.Api
-dotnet run
+dotnet run -- --service
 ```
 
 ## Windows deployment
@@ -54,7 +54,9 @@ The MSI:
 - shows a standard setup wizard with installation progress and visible error messages
 - installs Groundcrew under `C:\Program Files\Groundcrew`
 - registers and starts the `DcsGroundcrew` Windows service
-- adds an **Open Groundcrew** Start Menu shortcut
+- installs `Groundcrew.exe`; double-clicking it starts the service when necessary and opens the dashboard
+- adds a **Groundcrew** Start Menu shortcut that launches the executable
+- offers to open Groundcrew immediately on the final setup screen
 - listens on `http://127.0.0.1:5080` and, when Tailscale is active, its Tailscale IPv4 address on port 5080
 - limits the inbound firewall exception to Tailscale peers (`100.64.0.0/10`)
 - stores the SQLite database under `C:\ProgramData\Groundcrew` so upgrades preserve the configuration

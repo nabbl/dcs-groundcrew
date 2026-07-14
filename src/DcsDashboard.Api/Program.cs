@@ -5,6 +5,14 @@ using DcsDashboard.Api.Services;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 
+var serviceMode = args.Contains("--service", StringComparer.OrdinalIgnoreCase);
+var launcherMode = args.Contains("--open-dashboard", StringComparer.OrdinalIgnoreCase);
+if (OperatingSystem.IsWindows() && (launcherMode || !serviceMode))
+{
+    await DashboardLauncher.OpenAsync();
+    return;
+}
+
 var builder = WebApplication.CreateBuilder(args);
 builder.Host.UseWindowsService(options => options.ServiceName = "DCS Groundcrew");
 if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_URLS")))
