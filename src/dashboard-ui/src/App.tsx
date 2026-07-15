@@ -535,8 +535,8 @@ function FileBrowserDialog({ title, initialPath, extension, allowDirectory = fal
   return <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}><div className="file-browser" role="dialog" aria-modal="true" onMouseDown={event => event.stopPropagation()}><header><div><span className="eyebrow">WINDOWS HOST</span><h2>{title}</h2></div><button className="icon-button" onClick={onClose} aria-label="Close file browser"><X size={19} /></button></header><div className="browser-path"><button className="icon-button" disabled={!result?.parentPath} onClick={() => result?.parentPath && void load(result.parentPath)}>‹</button><HardDrive size={15} /><span>{result?.currentPath ?? initialPath ?? 'This PC'}</span></div><div className="browser-list">{loading && <div className="browser-empty"><RefreshCw className="spin" size={18} /> Reading server files…</div>}{error && <div className="browser-empty error"><ShieldAlert size={18} />{error}<button className="button outline" onClick={() => void load()}>Show drives</button></div>}{!loading && !error && entries.map(entry => <div className="browser-entry" key={entry.fullPath}><button onClick={() => entry.isDirectory ? void load(entry.fullPath) : onSelect(entry.fullPath)}>{entry.isDirectory ? <FolderCog size={17} /> : <FileArchive size={17} />}<span><strong>{entry.name}</strong><small>{entry.isDirectory ? 'Folder' : `${Math.round((entry.size ?? 0) / 104857.6) / 10} MB`}</small></span></button>{!entry.isDirectory && <button className="button outline" onClick={() => onSelect(entry.fullPath)}>Select</button>}</div>)}{!loading && !error && entries.length === 0 && <div className="browser-empty">No matching files in this location.</div>}</div><footer><span>{extension ? `Showing ${extension} files` : 'Server-side filesystem'}</span>{allowDirectory && result && result.currentPath !== 'This PC' && <button className="button primary" onClick={() => onSelect(result.currentPath)}>Select this folder</button>}</footer></div></div>
 }
 
-function ConfirmDialog({ title, body, action, danger, onConfirm, onClose }: { title: string; body: string; action: string; danger?: boolean; onConfirm: () => void; onClose: () => void }) {
-  return <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}><div className="dialog" role="dialog" aria-modal="true" onMouseDown={e => e.stopPropagation()}><button className="dialog-close" onClick={onClose}><X size={18} /></button><span className={`dialog-icon ${danger ? 'danger' : ''}`}>{danger ? <ShieldAlert /> : <RotateCcw />}</span><h2>{title}</h2><p>{body}</p><div className="dialog-actions"><button className="button ghost" onClick={onClose}>Cancel</button><button className={`button ${danger ? 'danger' : 'primary'}`} onClick={onConfirm}>{action}</button></div></div></div>
+function ConfirmDialog({ title, body, action, danger, busy, error, onConfirm, onClose }: { title: string; body: string; action: string; danger?: boolean; busy?: boolean; error?: string; onConfirm: () => void; onClose: () => void }) {
+  return <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}><div className="dialog" role="dialog" aria-modal="true" onMouseDown={e => e.stopPropagation()}><button className="dialog-close" disabled={busy} onClick={onClose}><X size={18} /></button><span className={`dialog-icon ${danger ? 'danger' : ''}`}>{danger ? <ShieldAlert /> : <RotateCcw />}</span><h2>{title}</h2><p>{body}</p>{error && <div className="integration-error"><ShieldAlert size={14} />{error}</div>}<div className="dialog-actions"><button className="button ghost" disabled={busy} onClick={onClose}>Cancel</button><button className={`button ${danger ? 'danger' : 'primary'}`} disabled={busy} onClick={onConfirm}>{action}</button></div></div></div>
 }
 
 function DcsUpdaterCard({ status, onCheck, onUpdate }: { status: DcsUpdateStatus | null; onCheck: () => void; onUpdate: () => void }) {
@@ -563,6 +563,7 @@ export default function App() {
   const [navExpanded, setNavExpanded] = useState(false)
   const [pending, setPending] = useState<{ kind: 'start' | 'stop' | 'restart' | 'mission' | 'update'; value?: string } | null>(null)
   const [busy, setBusy] = useState(false)
+  const [controlError, setControlError] = useState('')
   const [dcsUpdate, setDcsUpdate] = useState<DcsUpdateStatus | null>(null)
 
   const refreshSnapshot = async () => setData(await getSnapshot())
@@ -601,7 +602,7 @@ export default function App() {
   }
   const act = async () => {
     if (!pending) return
-    setBusy(true)
+    setBusy(true); setControlError('')
     if (pending.kind === 'update') {
       if (data.demoMode) {
         setDcsUpdate(current => ({ ...(current ?? mockDcsUpdateStatus), isUpdating: true, message: 'DCS_updater is downloading and installing the update…', error: null }))
@@ -618,13 +619,19 @@ export default function App() {
       return
     }
     const action = pending.kind === 'mission' ? 'restart' : pending.kind
-    const missionResult = pending.kind === 'mission' && pending.value && !data.demoMode ? await switchMission(pending.value) : null
-    if (pending.kind !== 'mission' || data.demoMode) await serverAction(action)
-    const missionName = pending.value?.split(/[\\/]/).pop()?.replace(/\.miz$/i, '')
-    if (!missionResult || missionResult.ok) {
-      setData(current => ({ ...current, server: { ...current.server, state: action === 'stop' ? 'stopped' : 'running', mission: missionName ?? current.server.mission } }))
-      if (pending.kind === 'mission' && pending.value) setSettings(current => ({ ...current, activeMissionPath: pending.value! }))
+    const controlResult = data.demoMode
+      ? { ok: true }
+      : pending.kind === 'mission' && pending.value
+        ? await switchMission(pending.value)
+        : await serverAction(action)
+    if (!controlResult.ok) {
+      setControlError(controlResult.error ?? `DCS could not ${action}.`)
+      setBusy(false)
+      return
     }
+    const missionName = pending.value?.split(/[\\/]/).pop()?.replace(/\.miz$/i, '')
+    setData(current => ({ ...current, server: { ...current.server, state: action === 'stop' ? 'stopped' : 'running', mission: missionName ?? current.server.mission } }))
+    if (pending.kind === 'mission' && pending.value) setSettings(current => ({ ...current, activeMissionPath: pending.value! }))
     setBusy(false); setPending(null)
   }
 
@@ -661,7 +668,7 @@ export default function App() {
         <button className="power-button" onClick={() => setPending({ kind: data.server.state === 'running' ? 'stop' : 'start' })}><Power size={19} /> {data.server.state === 'running' ? 'SHUT DOWN INSTANCE' : 'START INSTANCE'}</button>
       </aside>
 
-      {pending && <ConfirmDialog title={pending.kind === 'update' ? `Update DCS to ${dcsUpdate?.latestVersion ?? 'the latest version'}?` : pending.kind === 'mission' ? 'Load mission and restart?' : `${pending.kind[0].toUpperCase()}${pending.kind.slice(1)} DCS server?`} body={pending.kind === 'update' ? 'Groundcrew will stop the dedicated server, run the official DCS updater, and restart the instance if it is currently running. Connected players will be disconnected.' : pending.kind === 'mission' ? `${pending.value} will become the active mission. Connected players will be disconnected during the restart.` : `This action controls the DCS dedicated server process on the Windows host.${pending.kind !== 'start' ? ' Connected players may be disconnected.' : ''}`} action={busy ? 'Working…' : pending.kind === 'update' ? 'Update DCS' : pending.kind === 'mission' ? 'Load & restart' : `${pending.kind} server`} danger={pending.kind === 'stop'} onConfirm={act} onClose={() => !busy && setPending(null)} />}
+      {pending && <ConfirmDialog title={pending.kind === 'update' ? `Update DCS to ${dcsUpdate?.latestVersion ?? 'the latest version'}?` : pending.kind === 'mission' ? 'Load mission and restart?' : `${pending.kind[0].toUpperCase()}${pending.kind.slice(1)} DCS server?`} body={pending.kind === 'update' ? 'Groundcrew will stop the dedicated server, run the official DCS updater, and restart the instance if it is currently running. Connected players will be disconnected.' : pending.kind === 'mission' ? `${pending.value} will become the active mission. Connected players will be disconnected during the restart.` : `This action controls the DCS dedicated server process on the Windows host.${pending.kind !== 'start' ? ' Connected players may be disconnected.' : ''}`} action={busy ? 'Working…' : pending.kind === 'update' ? 'Update DCS' : pending.kind === 'mission' ? 'Load & restart' : `${pending.kind} server`} danger={pending.kind === 'stop'} busy={busy} error={controlError} onConfirm={act} onClose={() => { if (!busy) { setPending(null); setControlError('') } }} />}
     </div>
   )
 }

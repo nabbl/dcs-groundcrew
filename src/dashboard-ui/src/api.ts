@@ -12,13 +12,14 @@ export async function getSnapshot(): Promise<DashboardSnapshot> {
   }
 }
 
-export async function serverAction(action: 'start' | 'stop' | 'restart'): Promise<boolean> {
+export async function serverAction(action: 'start' | 'stop' | 'restart'): Promise<{ ok: boolean; error?: string }> {
   try {
     const response = await fetch(`/api/server/${action}`, { method: 'POST' })
-    return response.ok
+    if (response.ok) return { ok: true }
+    const problem = await response.json().catch(() => null) as { error?: string; detail?: string } | null
+    return { ok: false, error: problem?.error ?? problem?.detail ?? `DCS could not ${action}.` }
   } catch {
-    await new Promise(resolve => window.setTimeout(resolve, 600))
-    return true
+    return { ok: false, error: 'Groundcrew could not reach its backend service.' }
   }
 }
 

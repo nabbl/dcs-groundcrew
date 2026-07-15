@@ -6,12 +6,14 @@ namespace DcsDashboard.Api.Services;
 public sealed class DcsProcessService
 {
     private readonly SettingsStore _settings;
+    private readonly InteractiveProcessLauncher _launcher;
     private readonly ILogger<DcsProcessService> _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
-    public DcsProcessService(SettingsStore settings, ILogger<DcsProcessService> logger)
+    public DcsProcessService(SettingsStore settings, InteractiveProcessLauncher launcher, ILogger<DcsProcessService> logger)
     {
         _settings = settings;
+        _launcher = launcher;
         _logger = logger;
     }
 
@@ -35,14 +37,17 @@ public sealed class DcsProcessService
             if (string.IsNullOrWhiteSpace(settings.DcsExecutablePath) || !File.Exists(settings.DcsExecutablePath))
                 throw new InvalidOperationException("Configure a valid DCS executable path before starting the server.");
 
-            var startInfo = new ProcessStartInfo(settings.DcsExecutablePath, settings.DcsArguments)
-            {
-                WorkingDirectory = Path.GetDirectoryName(settings.DcsExecutablePath)!,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            _ = Process.Start(startInfo) ?? throw new InvalidOperationException("Windows did not start the DCS process.");
-            _logger.LogInformation("Started DCS dedicated server.");
+            var workingDirectory = Path.GetDirectoryName(settings.DcsExecutablePath)!;
+            var launched = _launcher.Start(settings.DcsExecutablePath, settings.DcsArguments, workingDirectory);
+            await Task.Delay(TimeSpan.FromSeconds(2));
+            if (launched.Process.HasExited)
+                throw new InvalidOperationException($"DCS exited immediately with code {launched.Process.ExitCode}. Check Saved Games\\Logs\\dcs.log for the startup error.");
+            _logger.LogInformation(
+                "Started DCS dedicated server process {ProcessId} in Windows session {SessionId}. Executable: {Executable}; arguments: {Arguments}",
+                launched.Process.Id,
+                launched.SessionId,
+                settings.DcsExecutablePath,
+                settings.DcsArguments);
         }
         finally { _gate.Release(); }
     }

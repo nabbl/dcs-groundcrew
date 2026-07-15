@@ -32,6 +32,7 @@ builder.Services.AddHttpClient("dcs-updates", client =>
 });
 builder.Services.AddSingleton<SettingsStore>();
 builder.Services.AddSingleton<ModerationAuditStore>();
+builder.Services.AddSingleton<InteractiveProcessLauncher>();
 builder.Services.AddSingleton<DcsProcessService>();
 builder.Services.AddSingleton<DcsUpdateService>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<DcsUpdateService>());
