@@ -17,6 +17,8 @@ public sealed partial class DcsUpdateService : BackgroundService
     private readonly SemaphoreSlim _updateGate = new(1, 1);
     private readonly object _statusGate = new();
     private DcsUpdateStatus _status = new(null, null, false, false, false, false, null, ReleasePage, null, null, null);
+    private string? _updaterConfirmedExecutable;
+    private string? _updaterConfirmedVersion;
 
     public DcsUpdateService(SettingsStore settings, DcsProcessService dcs, IHttpClientFactory httpClients, ILogger<DcsUpdateService> logger)
     {
@@ -151,8 +153,15 @@ public sealed partial class DcsUpdateService : BackgroundService
             var changed = CompareVersions(updated.Version, beforeVersion) > 0;
             var knownLatest = GetStatusSnapshot().LatestVersion;
             var reachedLatest = updated.Version is not null && knownLatest is not null && CompareVersions(updated.Version, knownLatest) >= 0;
-            if (!changed && !reachedLatest)
+            var updaterConfirmedHotfix = knownLatest is not null && DcsVersionReader.SameCoreBuild(updated.Version, knownLatest);
+            if (!changed && !reachedLatest && !updaterConfirmedHotfix)
                 throw new InvalidOperationException($"The updater finished, but DCS still reports version {updated.Version ?? "unknown"}. {Tail(output)}".Trim());
+
+            if (updaterConfirmedHotfix)
+            {
+                ConfirmUpdaterVersion(updated.ExecutablePath!, knownLatest!);
+                updated = updated with { Version = knownLatest };
+            }
 
             SetStatus(status => status with
             {
@@ -242,7 +251,8 @@ public sealed partial class DcsUpdateService : BackgroundService
             installRoot is null ? null : Path.Combine(installRoot, "DCS_updater.exe")
         };
         var updater = candidates.FirstOrDefault(path => path is not null && File.Exists(path));
-        return new(executable, installRoot, updater, ReadVersion(executable), OperatingSystem.IsWindows() && updater is not null);
+        var detectedVersion = DcsVersionReader.Read(executable, settings.SavedGamesPath);
+        return new(executable, installRoot, updater, ResolveUpdaterConfirmedVersion(executable, detectedVersion), OperatingSystem.IsWindows() && updater is not null);
     }
 
     internal static string? ParseLatestVersion(string html)
@@ -268,19 +278,26 @@ public sealed partial class DcsUpdateService : BackgroundService
         return 0;
     }
 
-    private static string? ReadVersion(string executablePath)
-    {
-        try
-        {
-            var raw = FileVersionInfo.GetVersionInfo(executablePath).FileVersion;
-            var match = VersionNumberRegex().Match(raw ?? "");
-            return match.Success ? match.Value : raw;
-        }
-        catch { return null; }
-    }
-
     private DcsUpdateStatus GetStatusSnapshot() { lock (_statusGate) return _status; }
     private void SetStatus(Func<DcsUpdateStatus, DcsUpdateStatus> update) { lock (_statusGate) _status = update(_status); }
+    private void ConfirmUpdaterVersion(string executablePath, string version)
+    {
+        lock (_statusGate)
+        {
+            _updaterConfirmedExecutable = executablePath;
+            _updaterConfirmedVersion = version;
+        }
+    }
+    private string? ResolveUpdaterConfirmedVersion(string executablePath, string? detectedVersion)
+    {
+        lock (_statusGate)
+        {
+            return string.Equals(_updaterConfirmedExecutable, executablePath, StringComparison.OrdinalIgnoreCase)
+                && DcsVersionReader.SameCoreBuild(detectedVersion, _updaterConfirmedVersion)
+                ? _updaterConfirmedVersion
+                : detectedVersion;
+        }
+    }
     private static string Tail(string value) => value.Length <= 500 ? value : value[^500..];
 
     [GeneratedRegex(@"Latest\s+stable\s+version\s+is[\s\S]*?([0-9]+(?:\.[0-9]+){2,})", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]

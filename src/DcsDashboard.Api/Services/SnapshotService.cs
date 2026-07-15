@@ -26,7 +26,7 @@ public sealed class SnapshotService
         var version = "Not installed";
         if (!string.IsNullOrWhiteSpace(settings.DcsExecutablePath) && File.Exists(settings.DcsExecutablePath))
         {
-            try { version = System.Diagnostics.FileVersionInfo.GetVersionInfo(settings.DcsExecutablePath).FileVersion ?? "Unknown"; } catch { version = "Unknown"; }
+            version = DcsVersionReader.Read(settings.DcsExecutablePath, settings.SavedGamesPath) ?? "Unknown";
         }
         var configuredMission = string.IsNullOrWhiteSpace(settings.ActiveMissionPath) ? "No mission selected" : Path.GetFileNameWithoutExtension(settings.ActiveMissionPath);
         var mission = running && live.Connected && !string.IsNullOrWhiteSpace(live.MissionName) ? live.MissionName : configuredMission;

@@ -49,7 +49,7 @@ Existing package files and Lua files are retained under `Saved Games\Groundcrew 
 
 ### DCS updates
 
-Groundcrew checks the official Eagle Dynamics updates page shortly after the service starts and every six hours after that. The right-hand instance rail can also run an immediate check. When a newer build is available, **Update DCS** asks for confirmation, stops the dedicated server, runs that installation's `DCS_updater.exe --quiet update`, verifies the installed executable version, and restarts DCS only if it was running before the update. The updater retains the DCS installation's configured release channel; Groundcrew does not replace or rewrite `autoupdate.cfg`.
+Groundcrew checks the official Eagle Dynamics updates page shortly after the service starts and every six hours after that. The right-hand instance rail can also run an immediate check. When a newer build is available, **Update DCS** asks for confirmation, stops the dedicated server, runs that installation's `DCS_updater.exe --quiet update`, verifies the installed version, and restarts DCS only if it was running before the update. Version detection reads the complete installed version from `autoupdate.cfg`, with DCS product metadata and `Saved Games\Logs\dcs.log` as fallbacks, because Windows file-version metadata may omit Eagle Dynamics' fifth hotfix segment. The updater retains the DCS installation's configured release channel; Groundcrew reads but never replaces or rewrites `autoupdate.cfg`.
 
 Update-page outages and unrecognized responses are contained as status errors and do not affect DCS controls or dashboard snapshots. Groundcrew never applies an update automatically.
 
