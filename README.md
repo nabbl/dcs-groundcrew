@@ -15,6 +15,7 @@ Working now:
 - server-side Windows file browser for executables, Saved Games, missions, and Tacview recordings
 - recursive `.miz` discovery from the mission-library folder configured in Settings, with an explicit restart confirmation flow
 - cached, read-only `.miz` readiness summaries for theatre, date/time, weather, static flyable slots, declared dependencies, recognized script frameworks, archive integrity, and server-cap mismatches
+- best-effort mission parsing that skips unfamiliar fields and optional sections independently; even a completely unreadable mission produces a contained report without affecting the dashboard or later inspections
 - GUI editing for common `Config\serverSettings.lua` options, including server identity, connection cap, port, mission lifecycle, integrity checks, exports, voice chat, and player permissions
 - password-safe, surgical Lua updates that preserve mission lists and unknown settings and create a timestamped backup before writing
 - working per-integration configuration for executable/config paths, URLs, and network endpoints

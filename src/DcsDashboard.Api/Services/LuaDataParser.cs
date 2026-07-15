@@ -24,7 +24,7 @@ internal sealed class LuaDataValue
 
 internal static class LuaDataParser
 {
-    public static LuaDataValue ParseAssignment(string input)
+    public static LuaDataParseResult ParseAssignmentBestEffort(string input)
     {
         var parser = new Parser(input);
         if (parser.Peek().Kind == TokenKind.Identifier)
@@ -33,7 +33,7 @@ internal static class LuaDataParser
             parser.Expect(TokenKind.Equals);
         }
         var result = parser.ParseValue();
-        return result;
+        return new LuaDataParseResult(result, parser.SkippedFields);
     }
 
     private sealed class Parser
@@ -43,6 +43,7 @@ internal static class LuaDataParser
         private readonly Lexer _lexer;
         private readonly Queue<Token> _tokens = new();
         private int _valueCount;
+        public int SkippedFields { get; private set; }
 
         public Parser(string input) => _lexer = new Lexer(input);
 
@@ -67,8 +68,8 @@ internal static class LuaDataParser
 
         public LuaDataValue ParseValue(int depth = 0)
         {
-            if (depth > MaximumDepth) throw new FormatException($"Lua data nesting exceeds the supported depth of {MaximumDepth}.");
-            if (++_valueCount > MaximumValues) throw new FormatException($"Lua data contains more than {MaximumValues:N0} values.");
+            if (depth > MaximumDepth) throw new InvalidDataException($"Lua data nesting exceeds the supported depth of {MaximumDepth}.");
+            if (++_valueCount > MaximumValues) throw new InvalidDataException($"Lua data contains more than {MaximumValues:N0} values.");
             var token = Take();
             return token.Kind switch
             {
@@ -88,33 +89,66 @@ internal static class LuaDataParser
             var positionalIndex = 1;
             while (Peek().Kind is not TokenKind.RightBrace and not TokenKind.End)
             {
-                string key;
-                LuaDataValue value;
-                if (Peek().Kind == TokenKind.LeftBracket)
+                try
                 {
-                    Take();
-                    var keyValue = ParseValue(depth + 1);
-                    Expect(TokenKind.RightBracket);
-                    Expect(TokenKind.Equals);
-                    key = KeyText(keyValue, positionalIndex++);
-                    value = ParseValue(depth + 1);
+                    string key;
+                    LuaDataValue value;
+                    if (Peek().Kind == TokenKind.LeftBracket)
+                    {
+                        Take();
+                        var keyValue = ParseValue(depth + 1);
+                        Expect(TokenKind.RightBracket);
+                        Expect(TokenKind.Equals);
+                        key = KeyText(keyValue, positionalIndex++);
+                        value = ParseValue(depth + 1);
+                    }
+                    else if (Peek().Kind == TokenKind.Identifier && Peek(1).Kind == TokenKind.Equals)
+                    {
+                        key = Take().Text;
+                        Take();
+                        value = ParseValue(depth + 1);
+                    }
+                    else
+                    {
+                        key = (positionalIndex++).ToString(CultureInfo.InvariantCulture);
+                        value = ParseValue(depth + 1);
+                    }
+                    fields[key] = value;
+                    if (Peek().Kind is TokenKind.Comma or TokenKind.Semicolon) Take();
                 }
-                else if (Peek().Kind == TokenKind.Identifier && Peek(1).Kind == TokenKind.Equals)
+                catch (Exception exception) when (exception is FormatException or OverflowException)
                 {
-                    key = Take().Text;
-                    Take();
-                    value = ParseValue(depth + 1);
+                    SkippedFields++;
+                    RecoverTableField();
                 }
-                else
-                {
-                    key = (positionalIndex++).ToString(CultureInfo.InvariantCulture);
-                    value = ParseValue(depth + 1);
-                }
-                fields[key] = value;
-                if (Peek().Kind is TokenKind.Comma or TokenKind.Semicolon) Take();
             }
-            Expect(TokenKind.RightBrace);
+            if (Peek().Kind == TokenKind.RightBrace) Take();
+            else SkippedFields++;
             return new LuaDataValue(fields);
+        }
+
+        private void RecoverTableField()
+        {
+            var braceDepth = 0;
+            var bracketDepth = 0;
+            var parenthesisDepth = 0;
+            while (true)
+            {
+                var kind = Peek().Kind;
+                if (kind == TokenKind.End) return;
+                if (kind == TokenKind.RightBrace && braceDepth == 0 && bracketDepth == 0 && parenthesisDepth == 0) return;
+                kind = Take().Kind;
+                switch (kind)
+                {
+                    case TokenKind.LeftBrace: braceDepth++; break;
+                    case TokenKind.RightBrace when braceDepth > 0: braceDepth--; break;
+                    case TokenKind.LeftBracket: bracketDepth++; break;
+                    case TokenKind.RightBracket when bracketDepth > 0: bracketDepth--; break;
+                    case TokenKind.LeftParenthesis: parenthesisDepth++; break;
+                    case TokenKind.RightParenthesis when parenthesisDepth > 0: parenthesisDepth--; break;
+                    case TokenKind.Comma or TokenKind.Semicolon when braceDepth == 0 && bracketDepth == 0 && parenthesisDepth == 0: return;
+                }
+            }
         }
 
         private static string KeyText(LuaDataValue value, int fallback) => value.Scalar switch
@@ -146,6 +180,8 @@ internal static class LuaDataParser
                 case '=': return new Token(TokenKind.Equals, "=", start);
                 case ',': return new Token(TokenKind.Comma, ",", start);
                 case ';': return new Token(TokenKind.Semicolon, ";", start);
+                case '(': return new Token(TokenKind.LeftParenthesis, "(", start);
+                case ')': return new Token(TokenKind.RightParenthesis, ")", start);
                 case '[':
                     if (TryReadLongBracket(start, out var longText)) return new Token(TokenKind.String, longText, start);
                     return new Token(TokenKind.LeftBracket, "[", start);
@@ -165,7 +201,7 @@ internal static class LuaDataParser
                 var text = _input[start.._position];
                 return new Token(text switch { "true" => TokenKind.True, "false" => TokenKind.False, "nil" => TokenKind.Nil, _ => TokenKind.Identifier }, text, start);
             }
-            throw new FormatException($"Unsupported Lua token '{current}' at character {start}.");
+            return new Token(TokenKind.Unknown, current.ToString(), start);
         }
 
         private void SkipTrivia()
@@ -212,5 +248,7 @@ internal static class LuaDataParser
     }
 
     private readonly record struct Token(TokenKind Kind, string Text, int Position);
-    private enum TokenKind { End, Identifier, String, Number, True, False, Nil, LeftBrace, RightBrace, LeftBracket, RightBracket, Equals, Comma, Semicolon }
+    private enum TokenKind { End, Unknown, Identifier, String, Number, True, False, Nil, LeftBrace, RightBrace, LeftBracket, RightBracket, LeftParenthesis, RightParenthesis, Equals, Comma, Semicolon }
 }
+
+internal sealed record LuaDataParseResult(LuaDataValue Value, int SkippedFields);
