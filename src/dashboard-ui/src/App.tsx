@@ -60,7 +60,7 @@ function IntegrationRow({ item, config, grpcStatus, expanded, busy, error, onExp
   const webOnly = item.kind === 'web'
   const managedGrpc = item.id === 'grpc'
   const installed = managedGrpc && grpcStatus ? grpcStatus.installed : item.installed
-  const running = managedGrpc && grpcStatus ? grpcStatus.running : item.running
+  const running = item.running
   const endpoint = item.url ?? (config?.port ? `${config.host || '127.0.0.1'}:${config.port}` : undefined)
   const status = webOnly ? (installed ? 'Web app' : 'Not configured') : running ? 'Running' : installed ? 'Installed' : managedGrpc ? 'Not installed' : 'Not configured'
   return (
@@ -102,7 +102,7 @@ function Overview({ data, onNavigate }: { data: DashboardSnapshot; onNavigate: (
         <div className="hero-copy">
           <span className="eyebrow">ACTIVE MISSION · {data.server.theatre.toUpperCase()}</span>
           <h1>{data.server.mission}</h1>
-          <p>{data.server.state === 'running' ? 'Live server telemetry and mission services are operating normally.' : 'The instance is offline. Configure the host, then start the dedicated server.'}</p>
+          <p>{data.server.paused ? 'The mission is paused. Live telemetry remains connected.' : data.server.state === 'running' ? 'Live server telemetry and mission services are operating normally.' : 'The instance is offline. Configure the host, then start the dedicated server.'}</p>
           <div className="hero-stats">
             <span><Users size={16} /><strong>{data.server.players}</strong> / {data.server.maxPlayers} pilots</span>
             <span><Gauge size={16} /><strong>{data.server.fps}</strong> FPS</span>
@@ -410,6 +410,7 @@ function Chat({ data }: { data: DashboardSnapshot }) {
   const [message, setMessage] = useState('')
   const [messages, setMessages] = useState(data.chat)
   const [error, setError] = useState('')
+  useEffect(() => { setMessages(data.chat) }, [data.chat])
   const send = async () => {
     const text = message.trim()
     if (!text) return

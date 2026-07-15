@@ -23,6 +23,7 @@ public sealed record ServerStatus(
     string Theatre,
     long UptimeSeconds,
     double Fps,
+    bool Paused,
     int Players,
     int MaxPlayers);
 

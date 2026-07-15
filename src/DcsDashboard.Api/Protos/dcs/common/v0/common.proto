@@ -1,0 +1,11 @@
+syntax = "proto3";
+package dcs.common.v0;
+option csharp_namespace = "Groundcrew.DcsGrpc.V0.Common";
+
+// Wire-compatible subset of the DCS-gRPC 0.8.1 common contract.
+enum Coalition {
+  COALITION_ALL = 0;
+  COALITION_NEUTRAL = 1;
+  COALITION_RED = 2;
+  COALITION_BLUE = 3;
+}

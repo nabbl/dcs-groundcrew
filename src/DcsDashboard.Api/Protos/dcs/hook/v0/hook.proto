@@ -1,0 +1,23 @@
+syntax = "proto3";
+package dcs.hook.v0;
+option csharp_namespace = "Groundcrew.DcsGrpc.V0.Hook";
+
+// Wire-compatible subset of the DCS-gRPC 0.8.1 hook contract.
+service HookService {
+  rpc GetMissionName(GetMissionNameRequest) returns (GetMissionNameResponse) {}
+  rpc GetMissionFilename(GetMissionFilenameRequest) returns (GetMissionFilenameResponse) {}
+  rpc GetPaused(GetPausedRequest) returns (GetPausedResponse) {}
+  rpc GetRealTime(GetRealTimeRequest) returns (GetRealTimeResponse) {}
+  rpc GetUnitType(GetUnitTypeRequest) returns (GetUnitTypeResponse) {}
+}
+
+message GetMissionNameRequest {}
+message GetMissionNameResponse { string name = 1; }
+message GetMissionFilenameRequest {}
+message GetMissionFilenameResponse { string name = 1; }
+message GetPausedRequest {}
+message GetPausedResponse { bool paused = 1; }
+message GetRealTimeRequest {}
+message GetRealTimeResponse { double time = 1; }
+message GetUnitTypeRequest { string id = 1; }
+message GetUnitTypeResponse { string type = 1; }

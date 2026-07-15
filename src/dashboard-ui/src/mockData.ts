@@ -125,6 +125,7 @@ export const mockSnapshot: DashboardSnapshot = {
     theatre: 'Syria',
     uptimeSeconds: 17342,
     fps: 58,
+    paused: false,
     players: 12,
     maxPlayers: 32,
   },

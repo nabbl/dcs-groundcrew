@@ -1,0 +1,61 @@
+syntax = "proto3";
+package dcs.mission.v0;
+option csharp_namespace = "Groundcrew.DcsGrpc.V0.Mission";
+
+// Wire-compatible subset of the DCS-gRPC 0.8.1 mission event contract.
+service MissionService {
+  rpc StreamEvents(StreamEventsRequest) returns (stream StreamEventsResponse) {}
+}
+
+message StreamEventsRequest {}
+message StreamEventsResponse {
+  message MissionStartEvent {}
+  message MissionEndEvent {}
+  message ConnectEvent {
+    string addr = 1;
+    string name = 2;
+    string ucid = 3;
+    uint32 id = 4;
+  }
+  enum DisconnectReason {
+    DISCONNECT_REASON_UNSPECIFIED = 0;
+    DISCONNECT_REASON_THATS_OKAY = 1;
+    DISCONNECT_REASON_INVALID_ADDRESS = 2;
+    DISCONNECT_REASON_CONNECT_FAILED = 3;
+    DISCONNECT_REASON_WRONG_VERSION = 4;
+    DISCONNECT_REASON_PROTOCOL_ERROR = 5;
+    DISCONNECT_REASON_TIMEOUT = 6;
+    DISCONNECT_REASON_INVALID_PASSWORD = 101;
+    DISCONNECT_REASON_BANNED = 102;
+    DISCONNECT_REASON_BAD_CALLSIGN = 103;
+    DISCONNECT_REASON_TAINTED_CLIENT = 104;
+    DISCONNECT_REASON_KICKED = 105;
+    DISCONNECT_REASON_REFUSED = 106;
+    DISCONNECT_REASON_DENIED_TRIAL_ONLY = 107;
+  }
+  message DisconnectEvent {
+    uint32 id = 1;
+    DisconnectReason reason = 2;
+  }
+  message PlayerSendChatEvent {
+    uint32 player_id = 1;
+    string message = 2;
+  }
+  message PlayerChangeSlotEvent {
+    uint32 player_id = 1;
+    uint32 coalition = 2;
+    string slot_id = 3;
+  }
+  message SimulationFpsEvent { double average = 1; }
+
+  double time = 1;
+  oneof event {
+    MissionStartEvent mission_start = 14;
+    MissionEndEvent mission_end = 15;
+    ConnectEvent connect = 8192;
+    DisconnectEvent disconnect = 8193;
+    PlayerSendChatEvent player_send_chat = 8194;
+    PlayerChangeSlotEvent player_change_slot = 8195;
+    SimulationFpsEvent simulation_fps = 8199;
+  }
+}

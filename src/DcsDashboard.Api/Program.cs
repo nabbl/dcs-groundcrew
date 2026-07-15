@@ -2,6 +2,7 @@ using DcsDashboard.Api.Data;
 using DcsDashboard.Api.Hubs;
 using DcsDashboard.Api.Models;
 using DcsDashboard.Api.Services;
+using Grpc.Core;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 
@@ -29,6 +30,8 @@ builder.Services.AddSingleton<DcsProcessService>();
 builder.Services.AddSingleton<HostMetricsService>();
 builder.Services.AddSingleton<IntegrationService>();
 builder.Services.AddSingleton<GrpcInstallerService>();
+builder.Services.AddSingleton<DcsGrpcLiveService>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<DcsGrpcLiveService>());
 builder.Services.AddSingleton<DcsServerConfigurationService>();
 builder.Services.AddSingleton<MissionReadinessService>();
 builder.Services.AddScoped<SnapshotService>();
@@ -118,6 +121,7 @@ app.MapPost("/api/missions/switch", async (MissionSwitchRequest request, Setting
 
 app.MapGet("/api/integrations", async (IntegrationService service) => Results.Ok(await service.GetStatusesAsync()));
 app.MapGet("/api/grpc/status", async (GrpcInstallerService service) => Results.Ok(await service.GetStatusAsync()));
+app.MapGet("/api/grpc/live", (DcsGrpcLiveService service) => Results.Ok(service.GetSnapshot()));
 app.MapPost("/api/grpc/install", async (GrpcInstallerService service) =>
 {
     try { return Results.Ok(await service.InstallLatestAsync()); }
@@ -135,8 +139,18 @@ app.MapPost("/api/integrations/{id}/{action}", async (string id, string action, 
     catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
 });
 
-app.MapGet("/api/chat", () => Results.Ok(new { configured = false, messages = Array.Empty<ChatMessage>(), note = "Install and configure the DCS server hook before chat can be read." }));
-app.MapPost("/api/chat", (ChatSendRequest _) => Results.Problem("DCS chat adapter is not configured.", statusCode: 501));
+app.MapGet("/api/chat", (DcsGrpcLiveService service) =>
+{
+    var snapshot = service.GetSnapshot();
+    return Results.Ok(new { configured = snapshot.Connected, messages = snapshot.Chat, note = snapshot.Error });
+});
+app.MapPost("/api/chat", async (ChatSendRequest request, DcsGrpcLiveService service, CancellationToken cancellationToken) =>
+{
+    try { await service.SendChatAsync(request.Message, cancellationToken); return Results.Accepted(); }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (RpcException ex) { return Results.Conflict(new { error = $"DCS-gRPC did not accept the chat message: {ex.Status.Detail}" }); }
+    catch (Exception ex) { return Results.Problem($"DCS-gRPC chat is unavailable: {ex.Message}", statusCode: 503); }
+});
 app.MapPost("/api/players/{playerId}/{action}", (string playerId, string action, ModerationRequest _) => Results.Problem($"The DCS moderation adapter is not configured; '{action}' was not sent for player '{playerId}'.", statusCode: 501));
 
 app.MapHub<DashboardHub>("/hubs/dashboard");

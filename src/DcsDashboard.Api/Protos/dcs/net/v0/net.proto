@@ -1,0 +1,30 @@
+syntax = "proto3";
+package dcs.net.v0;
+import "dcs/common/v0/common.proto";
+option csharp_namespace = "Groundcrew.DcsGrpc.V0.Net";
+
+// Wire-compatible subset of the DCS-gRPC 0.8.1 net contract.
+service NetService {
+  rpc SendChat(SendChatRequest) returns (SendChatResponse) {}
+  rpc GetPlayers(GetPlayersRequest) returns (GetPlayersResponse) {}
+}
+
+message SendChatRequest {
+  string message = 1;
+  dcs.common.v0.Coalition coalition = 2;
+}
+message SendChatResponse {}
+message GetPlayersRequest {}
+message GetPlayersResponse {
+  message GetPlayerInfo {
+    uint32 id = 1;
+    string name = 2;
+    dcs.common.v0.Coalition coalition = 3;
+    string slot = 4;
+    uint32 ping = 5;
+    string remote_address = 6;
+    string ucid = 7;
+    string locale = 8;
+  }
+  repeated GetPlayerInfo players = 1;
+}

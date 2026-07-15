@@ -8,7 +8,8 @@ namespace DcsDashboard.Api.Services;
 public sealed class IntegrationService
 {
     private readonly SettingsStore _store;
-    public IntegrationService(SettingsStore store) => _store = store;
+    private readonly DcsGrpcLiveService _grpc;
+    public IntegrationService(SettingsStore store, DcsGrpcLiveService grpc) { _store = store; _grpc = grpc; }
 
     public async Task<IReadOnlyList<IntegrationStatus>> GetStatusesAsync()
     {
@@ -26,8 +27,8 @@ public sealed class IntegrationService
                     && File.Exists(Path.Combine(settings.SavedGamesPath, "Mods", "tech", "DCS-gRPC", "dcs_grpc.dll"))
                     && File.Exists(Path.Combine(settings.SavedGamesPath, "Scripts", "Hooks", "DCS-gRPC.lua"));
                 var grpcVersion = ReadGrpcVersion(Path.Combine(grpcRoot, "version.lua"));
-                var grpcPortListening = item.Port is > 0 && listeningPorts.Contains(item.Port.Value);
-                return new IntegrationStatus(item.Id, item.Name, item.Description, item.Kind, grpcInstalled, grpcPortListening, grpcVersion, null, true);
+                var live = _grpc.GetSnapshot();
+                return new IntegrationStatus(item.Id, item.Name, item.Description, item.Kind, grpcInstalled, live.Connected, live.Version ?? grpcVersion, null, true);
             }
             var executableInstalled = !string.IsNullOrWhiteSpace(item.ExecutablePath) && File.Exists(item.ExecutablePath);
             var configInstalled = !string.IsNullOrWhiteSpace(item.ConfigPath) && File.Exists(item.ConfigPath);

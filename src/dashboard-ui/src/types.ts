@@ -72,6 +72,7 @@ export interface DashboardSnapshot {
     theatre: string
     uptimeSeconds: number
     fps: number
+    paused: boolean
     players: number
     maxPlayers: number
   }
