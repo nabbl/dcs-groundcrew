@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using DcsDashboard.Api.Data;
 using DcsDashboard.Api.Models;
 
@@ -50,16 +51,17 @@ public sealed class MissionReadinessService
         {
             // Mission inspection remains available when serverSettings.lua cannot be read.
         }
-        var cacheKey = $"{path}|{file.Length}|{file.LastWriteTimeUtc.Ticks}|{playerLimit}|{settings.DcsExecutablePath}";
+        var installedCatalog = InstalledCatalog.Read(settings.DcsExecutablePath);
+        var cacheKey = $"{path}|{file.Length}|{file.LastWriteTimeUtc.Ticks}|{playerLimit}|{installedCatalog.Fingerprint}";
         if (_cache.TryGetValue(cacheKey, out var cached)) return cached;
 
-        var report = await AnalyzeAsync(file, settings.DcsExecutablePath, playerLimit);
+        var report = await AnalyzeAsync(file, installedCatalog, playerLimit);
         if (_cache.Count > 1000) _cache.Clear();
         _cache[cacheKey] = report;
         return report;
     }
 
-    private static async Task<MissionReadinessReport> AnalyzeAsync(FileInfo file, string dcsExecutablePath, int playerLimit)
+    private static async Task<MissionReadinessReport> AnalyzeAsync(FileInfo file, InstalledCatalog installedCatalog, int playerLimit)
     {
         var hash = await CalculateHashBestEffortAsync(file.FullName);
         try
@@ -104,7 +106,7 @@ public sealed class MissionReadinessService
             var neutralSlots = slots.Where(slot => slot.Coalition == "Neutral").Sum(slot => slot.Count);
             var totalSlots = blueSlots + redSlots + neutralSlots;
             IReadOnlyList<MissionDependency> dependencies;
-            try { dependencies = ReadDependencies(mission, theatre, dcsExecutablePath); }
+            try { dependencies = ReadDependencies(mission, theatre, installedCatalog); }
             catch (Exception exception)
             {
                 dependencies = Array.Empty<MissionDependency>();
@@ -188,9 +190,8 @@ public sealed class MissionReadinessService
             .ToList();
     }
 
-    private static IReadOnlyList<MissionDependency> ReadDependencies(LuaDataValue mission, string theatre, string dcsExecutablePath)
+    private static IReadOnlyList<MissionDependency> ReadDependencies(LuaDataValue mission, string theatre, InstalledCatalog catalog)
     {
-        var catalog = InstalledCatalog.Read(dcsExecutablePath);
         var dependencies = new List<MissionDependency>();
         if (!string.IsNullOrWhiteSpace(theatre) && theatre != "Unknown")
             dependencies.Add(new MissionDependency(DisplayTheatre(theatre), "Terrain", catalog.TerrainStatus(theatre)));
@@ -333,6 +334,7 @@ public sealed class MissionReadinessService
         "Nevada" => "Nevada Test and Training Range",
         "Falklands" => "South Atlantic",
         "SinaiMap" => "Sinai",
+        "GermanyCW" => "Germany Cold War",
         _ => theatre,
     };
 
@@ -401,17 +403,20 @@ public sealed class MissionReadinessService
         catch { return "unavailable"; }
     }
 
-    private sealed record InstalledCatalog(bool Configured, HashSet<string> Terrains, HashSet<string> Modules)
+    private sealed record InstalledCatalog(bool Configured, HashSet<string> Terrains, HashSet<string> Modules, string Fingerprint)
     {
+        private static readonly Regex PluginNamePattern = new("declare_plugin\\s*\\(\\s*['\"](?<name>[^'\"]+)['\"]", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
         public static InstalledCatalog Read(string executablePath)
         {
-            if (string.IsNullOrWhiteSpace(executablePath) || !File.Exists(executablePath)) return new(false, new(), new());
-            var executableDirectory = Directory.GetParent(executablePath);
-            var root = executableDirectory?.Name.StartsWith("bin", StringComparison.OrdinalIgnoreCase) == true ? executableDirectory.Parent?.FullName : executableDirectory?.FullName;
-            if (root is null || !Directory.Exists(root)) return new(false, new(), new());
-            return new(true, ReadDirectories(Path.Combine(root, "Mods", "terrains")), ReadDirectories(
+            if (string.IsNullOrWhiteSpace(executablePath) || !File.Exists(executablePath)) return new(false, new(), new(), "not-configured");
+            var root = ResolveInstallationRoot(executablePath);
+            if (root is null) return new(false, new(), new(), "not-configured");
+            var terrains = ReadDirectories(Path.Combine(root, "Mods", "terrains"), Path.Combine(root, "CoreMods", "terrains"));
+            var modules = ReadDirectories(
                 Path.Combine(root, "Mods", "aircraft"), Path.Combine(root, "Mods", "tech"),
-                Path.Combine(root, "CoreMods", "aircraft"), Path.Combine(root, "CoreMods", "tech")));
+                Path.Combine(root, "CoreMods", "aircraft"), Path.Combine(root, "CoreMods", "tech"));
+            return new(true, terrains.Names, modules.Names, $"{root}|terrain:{terrains.Fingerprint}|module:{modules.Fingerprint}");
         }
 
         public string TerrainStatus(string name)
@@ -428,9 +433,22 @@ public sealed class MissionReadinessService
             return Modules.Any(item => item == normalized || item.Contains(normalized, StringComparison.Ordinal) || normalized.Contains(item, StringComparison.Ordinal)) ? "available" : "declared";
         }
 
-        private static HashSet<string> ReadDirectories(params string[] paths)
+        private static string? ResolveInstallationRoot(string executablePath)
+        {
+            var executableDirectory = new FileInfo(executablePath).Directory;
+            for (var directory = executableDirectory; directory is not null; directory = directory.Parent)
+            {
+                if (Directory.Exists(Path.Combine(directory.FullName, "Mods")) || Directory.Exists(Path.Combine(directory.FullName, "CoreMods")))
+                    return directory.FullName;
+                if (directory.Parent is null || directory.FullName == directory.Root.FullName) break;
+            }
+            return null;
+        }
+
+        private static DirectoryCatalog ReadDirectories(params string[] paths)
         {
             var names = new HashSet<string>(StringComparer.Ordinal);
+            var fingerprints = new List<string>();
             foreach (var path in paths)
             {
                 try
@@ -438,8 +456,11 @@ public sealed class MissionReadinessService
                     if (!Directory.Exists(path)) continue;
                     foreach (var directory in Directory.EnumerateDirectories(path))
                     {
-                        var name = Path.GetFileName(directory);
+                        var info = new DirectoryInfo(directory);
+                        var name = info.Name;
                         if (!string.IsNullOrWhiteSpace(name)) names.Add(NormalizeName(name));
+                        fingerprints.Add($"{directory}:{info.LastWriteTimeUtc.Ticks}");
+                        ReadPluginNames(directory, names, fingerprints);
                     }
                 }
                 catch
@@ -447,7 +468,31 @@ public sealed class MissionReadinessService
                     // Other DCS content folders can still be checked when one folder is inaccessible.
                 }
             }
-            return names;
+            return new(names, string.Join(';', fingerprints.OrderBy(value => value, StringComparer.OrdinalIgnoreCase)));
         }
+
+        private static void ReadPluginNames(string directory, HashSet<string> names, List<string> fingerprints)
+        {
+            try
+            {
+                var entryPath = Path.Combine(directory, "entry.lua");
+                if (!File.Exists(entryPath)) return;
+                var info = new FileInfo(entryPath);
+                fingerprints.Add($"{entryPath}:{info.Length}:{info.LastWriteTimeUtc.Ticks}");
+                if (info.Length is <= 0 or > 1024 * 1024) return;
+                var content = File.ReadAllText(entryPath);
+                foreach (Match match in PluginNamePattern.Matches(content))
+                {
+                    var name = NormalizeName(match.Groups["name"].Value);
+                    if (!string.IsNullOrWhiteSpace(name)) names.Add(name);
+                }
+            }
+            catch
+            {
+                // Directory names remain usable when a plugin manifest cannot be read.
+            }
+        }
+
+        private sealed record DirectoryCatalog(HashSet<string> Names, string Fingerprint);
     }
 }
