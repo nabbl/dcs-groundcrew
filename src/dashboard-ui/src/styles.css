@@ -394,8 +394,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .quick-status svg { color: #73797c; }
 .quick-status i { color: #7f8588; font-size: 9px; font-style: normal; }
 .quick-status i.ok { color: var(--green); }
-.power-button { width: 100%; min-height: 42px; margin-top: 5px; display: flex; align-items: center; justify-content: center; gap: 9px; color: #181a1b; border: 0; background: var(--amber); font-size: 9px; font-weight: 900; cursor: pointer; }
-.power-button:hover { background: #ffb82e; }
 
 .dialog-backdrop { position: fixed; z-index: 100; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(4,5,5,.78); backdrop-filter: blur(5px); }
 .dialog { position: relative; width: min(440px, 100%); padding: 30px; background: #1c1f21; border: 1px solid #383c3e; box-shadow: 0 24px 80px rgba(0,0,0,.5); }
