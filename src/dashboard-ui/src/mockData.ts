@@ -1,4 +1,4 @@
-import type { DashboardSettings, DashboardSnapshot, DcsServerConfiguration, MissionLibraryResult, MissionReadinessReport } from './types'
+import type { DashboardSettings, DashboardSnapshot, DcsServerConfiguration, GrpcInstallationStatus, MissionLibraryResult, MissionReadinessReport } from './types'
 
 export const mockSettings: DashboardSettings = {
   serverName: 'DCS SERVER ONE',
@@ -10,6 +10,7 @@ export const mockSettings: DashboardSettings = {
   activeMissionPath: 'D:\\DCS\\Missions\\Operation Enduring Resolve v4.2.miz',
   maxPlayers: 32,
   integrations: [
+    { id: 'grpc', name: 'DCS-gRPC', description: 'Live mission data and server control API', kind: 'managed-service', executablePath: '', arguments: '', configPath: 'C:\\Users\\dcs-server\\Saved Games\\DCS.server\\Config\\dcs-grpc.lua', host: '127.0.0.1', port: 50051, srsAddress: '', telemetryAddress: '' },
     { id: 'srs', name: 'SimpleRadio Standalone', description: 'Voice communications', kind: 'network-process', executablePath: 'C:\\SRS\\SR-Server.exe', arguments: '', configPath: 'C:\\SRS\\server.cfg', host: '127.0.0.1', port: 5002, srsAddress: '', telemetryAddress: '' },
     { id: 'olympus', name: 'DCS Olympus', description: 'Real-time mission control', kind: 'web-process', executablePath: 'C:\\Olympus\\olympus.exe', arguments: '', configPath: 'C:\\Olympus\\olympus.json', host: '127.0.0.1', port: 3000, srsAddress: '', telemetryAddress: '', url: 'http://127.0.0.1:3000' },
     { id: 'tacview', name: 'Tacview', description: 'Flight recording and real-time telemetry', kind: 'telemetry', executablePath: '', arguments: '', configPath: 'C:\\Users\\dcs-server\\Saved Games\\DCS.server\\Config\\options.lua', host: '127.0.0.1', port: 42674, srsAddress: '', telemetryAddress: '' },
@@ -97,6 +98,23 @@ export const mockServerConfiguration: DcsServerConfiguration = {
   serverCanScreenshot: false,
 }
 
+export const mockGrpcStatus: GrpcInstallationStatus = {
+  installed: false,
+  running: false,
+  loaderConfigured: false,
+  autostartConfigured: false,
+  canInstall: true,
+  installedVersion: null,
+  latestVersion: '0.8.1',
+  updateAvailable: false,
+  host: '127.0.0.1',
+  port: 50051,
+  savedGamesPath: mockSettings.savedGamesPath,
+  missionScriptingPath: 'C:\\Program Files\\Eagle Dynamics\\DCS World Server\\Scripts\\MissionScripting.lua',
+  publishedAt: '2024-11-05T18:35:00Z',
+  requirementError: null,
+}
+
 export const mockSnapshot: DashboardSnapshot = {
   demoMode: true,
   server: {
@@ -123,6 +141,7 @@ export const mockSnapshot: DashboardSnapshot = {
     { id: '4', name: 'Overlord | GCI', side: 'Spectator', slot: 'Game Master', ping: 31, joinedAt: '2026-07-14T11:51:00Z' },
   ],
   integrations: [
+    { id: 'grpc', name: 'DCS-gRPC', description: 'Live mission data and server control API', kind: 'managed-service', installed: false, running: false, configurable: true },
     { id: 'srs', name: 'SimpleRadio Standalone', description: 'Voice communications', kind: 'network-process', installed: true, running: true, version: '2.2.0.1', configurable: true },
     { id: 'olympus', name: 'DCS Olympus', description: 'Real-time mission control', kind: 'web-process', installed: true, running: true, version: '2.1.3', url: 'http://127.0.0.1:3000', configurable: true },
     { id: 'tacview', name: 'Tacview', description: 'Flight recording and real-time telemetry', kind: 'telemetry', installed: true, running: false, version: '1.9.4', configurable: true },

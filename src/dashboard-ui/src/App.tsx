@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   Activity, Ban, ChevronRight, CircleGauge, Clock3, Cpu, ExternalLink,
-  FileArchive, FolderCog, Gauge, HardDrive, Headphones, Home, LayoutDashboard,
+  Download, FileArchive, FolderCog, Gauge, HardDrive, Headphones, Home, LayoutDashboard,
   MemoryStick, MessageSquareText, MoreHorizontal, Network, PanelLeftClose, PanelLeftOpen,
   Play, PlugZap, Power, Radio, RefreshCw, RotateCcw, Send, Server, Settings,
   ShieldAlert, Square, Users, X, Info,
 } from 'lucide-react'
-import { browseServer, getMissionLibrary, getServerConfiguration, getSettings, getSnapshot, inspectMission, integrationAction, saveServerConfiguration, saveSettings, sendChatMessage, serverAction, subscribeToSnapshots, switchMission } from './api'
-import { mockMissionLibrary, mockMissionReadiness, mockServerConfiguration, mockSettings, mockSnapshot } from './mockData'
-import type { DashboardSettings, DashboardSnapshot, DcsServerConfiguration, DcsServerConfigurationUpdate, FileBrowserResult, Integration, MissionFile, MissionLibraryResult, MissionReadinessReport, Player, ServerState } from './types'
+import { browseServer, getGrpcStatus, getMissionLibrary, getServerConfiguration, getSettings, getSnapshot, inspectMission, installGrpc, integrationAction, saveServerConfiguration, saveSettings, sendChatMessage, serverAction, subscribeToSnapshots, switchMission } from './api'
+import { mockGrpcStatus, mockMissionLibrary, mockMissionReadiness, mockServerConfiguration, mockSettings, mockSnapshot } from './mockData'
+import type { DashboardSettings, DashboardSnapshot, DcsServerConfiguration, DcsServerConfigurationUpdate, FileBrowserResult, GrpcInstallationResult, GrpcInstallationStatus, Integration, MissionFile, MissionLibraryResult, MissionReadinessReport, Player, ServerState } from './types'
 
 type Page = 'overview' | 'missions' | 'serverConfig' | 'players' | 'integrations' | 'chat' | 'settings'
 
@@ -56,27 +56,31 @@ function PlayerRow({ player, compact = false }: { player: Player; compact?: bool
   )
 }
 
-function IntegrationRow({ item, config, expanded, busy, error, onExpand, onOpen, onConfigure, onRestart }: { item: Integration; config?: IntegrationConfig; expanded: boolean; busy: boolean; error?: string; onExpand: () => void; onOpen: () => void; onConfigure: () => void; onRestart: () => void }) {
+function IntegrationRow({ item, config, grpcStatus, expanded, busy, error, onExpand, onOpen, onConfigure, onRestart, onManage }: { item: Integration; config?: IntegrationConfig; grpcStatus?: GrpcInstallationStatus | null; expanded: boolean; busy: boolean; error?: string; onExpand: () => void; onOpen: () => void; onConfigure: () => void; onRestart: () => void; onManage: () => void }) {
   const webOnly = item.kind === 'web'
+  const managedGrpc = item.id === 'grpc'
+  const installed = managedGrpc && grpcStatus ? grpcStatus.installed : item.installed
+  const running = managedGrpc && grpcStatus ? grpcStatus.running : item.running
   const endpoint = item.url ?? (config?.port ? `${config.host || '127.0.0.1'}:${config.port}` : undefined)
-  const status = webOnly ? (item.installed ? 'Web app' : 'Not configured') : item.running ? 'Running' : item.installed ? 'Stopped' : 'Not configured'
+  const status = webOnly ? (installed ? 'Web app' : 'Not configured') : running ? 'Running' : installed ? 'Installed' : managedGrpc ? 'Not installed' : 'Not configured'
   return (
     <article className={`integration-row ${expanded ? 'expanded' : ''}`}>
       <button className="integration-summary" onClick={onExpand}>
         <span className="integration-mark"><Radio size={19} /></span>
         <span className="integration-copy"><strong>{item.name}</strong><small>{item.description}</small></span>
-        <span className={`status-label ${item.running || webOnly && item.installed ? 'good' : item.installed ? 'idle' : 'missing'}`}>
-          <StateDot state={item.running || webOnly && item.installed} />{status}
+        <span className={`status-label ${running || webOnly && installed ? 'good' : installed ? 'idle' : 'missing'}`}>
+          <StateDot state={running || webOnly && installed} />{status}
         </span>
         <ChevronRight className="row-chevron" size={19} />
       </button>
       {expanded && (
         <div className="integration-detail">
-          <div><span>Version</span><strong>{item.version ?? '—'}</strong></div>
+          <div><span>Version</span><strong>{managedGrpc ? grpcStatus?.installedVersion ?? '—' : item.version ?? '—'}</strong></div>
           <div><span>{webOnly || item.kind === 'web-process' ? 'Web interface' : 'Endpoint'}</span><strong>{endpoint ?? 'Not configured'}</strong></div>
+          {managedGrpc && grpcStatus && <div className="grpc-health"><span className={grpcStatus.loaderConfigured ? 'ready' : ''}>Mission loader <strong>{grpcStatus.loaderConfigured ? 'Ready' : 'Missing'}</strong></span><span className={grpcStatus.autostartConfigured ? 'ready' : ''}>Autostart <strong>{grpcStatus.autostartConfigured ? 'On' : 'Off'}</strong></span><span className={!grpcStatus.updateAvailable ? 'ready' : ''}>Latest <strong>{grpcStatus.latestVersion ?? 'Unknown'}</strong></span></div>}
           <div className="integration-actions">
-            {!webOnly && item.kind !== 'telemetry' && item.installed && <button className="button outline" disabled={busy} onClick={onRestart}><RefreshCw className={busy ? 'spin' : ''} size={15} /> Restart</button>}
-            <button className={item.installed ? 'button ghost' : 'button outline'} onClick={onConfigure}>{item.installed ? <Settings size={15} /> : <HardDrive size={15} />} {item.installed ? 'Configuration' : 'Configure'}</button>
+            {!webOnly && item.kind !== 'telemetry' && !managedGrpc && installed && <button className="button outline" disabled={busy} onClick={onRestart}><RefreshCw className={busy ? 'spin' : ''} size={15} /> Restart</button>}
+            {managedGrpc ? <button className={installed ? 'button ghost' : 'button primary'} onClick={onManage}><Download size={15} /> {grpcStatus?.updateAvailable ? 'Update' : installed ? 'Repair / configure' : 'Install DCS-gRPC'}</button> : <button className={installed ? 'button ghost' : 'button outline'} onClick={onConfigure}>{installed ? <Settings size={15} /> : <HardDrive size={15} />} {installed ? 'Configuration' : 'Configure'}</button>}
             {item.url && <button className="button ghost" onClick={onOpen}><ExternalLink size={15} /> {item.id === 'dks' ? 'Open & sign in' : 'Open tool'}</button>}
           </div>
           {error && <div className="integration-error"><ShieldAlert size={14} />{error}</div>}
@@ -290,12 +294,18 @@ function Players({ players }: { players: Player[] }) {
   return <section className="panel page-panel"><header className="panel-header large"><div><span className="eyebrow">LIVE ROSTER</span><h1>Connected players</h1><p>{players.length} players currently connected. Moderation actions are logged.</p></div></header><div className="rows roomy">{players.map(p => <PlayerRow key={p.id} player={p} />)}</div><div className="moderation-note"><ShieldAlert size={18} /><div><strong>Moderation controls</strong><span>Open a player’s action menu to kick, ban, mute, or move them to spectators.</span></div></div></section>
 }
 
-function Integrations({ integrations, settings, onSaveSettings, onRefresh }: { integrations: Integration[]; settings: DashboardSettings; onSaveSettings: (settings: DashboardSettings) => Promise<boolean>; onRefresh: () => Promise<void> }) {
+function Integrations({ integrations, settings, demoMode, onSaveSettings, onRefresh }: { integrations: Integration[]; settings: DashboardSettings; demoMode: boolean; onSaveSettings: (settings: DashboardSettings) => Promise<boolean>; onRefresh: () => Promise<void> }) {
   const [expanded, setExpanded] = useState('srs')
   const [tool, setTool] = useState<Integration | null>(null)
   const [configuring, setConfiguring] = useState<IntegrationConfig | null>(null)
+  const [grpcManaging, setGrpcManaging] = useState(false)
+  const [grpcStatus, setGrpcStatus] = useState<GrpcInstallationStatus | null>(null)
   const [busy, setBusy] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
+  useEffect(() => {
+    if (demoMode) { setGrpcStatus(mockGrpcStatus); return }
+    void getGrpcStatus().then(setGrpcStatus).catch(reason => setErrors(current => ({ ...current, grpc: reason instanceof Error ? reason.message : 'DCS-gRPC status could not be loaded.' })))
+  }, [settings.savedGamesPath, settings.dcsExecutablePath, demoMode])
   const open = (item: Integration) => {
     if (!item.url) return
     if (item.id === 'dks') window.open(item.url, '_blank', 'noopener,noreferrer')
@@ -315,8 +325,47 @@ function Integrations({ integrations, settings, onSaveSettings, onRefresh }: { i
   }
   return <><section className="panel page-panel"><header className="panel-header large"><div><span className="eyebrow">COMPANION SERVICES</span><h1>Integrations</h1><p>Configure actual processes, endpoints, and files used by this DCS host.</p></div></header><div className="integration-list">{integrations.map(item => {
     const config = settings.integrations.find(value => value.id === item.id)
-    return <IntegrationRow key={item.id} item={item} config={config} expanded={expanded === item.id} busy={busy === item.id} error={errors[item.id]} onExpand={() => setExpanded(expanded === item.id ? '' : item.id)} onOpen={() => open(item)} onConfigure={() => config && setConfiguring(config)} onRestart={() => void restart(item)} />
-  })}</div></section>{tool?.url && <ToolFrame tool={tool} onClose={() => setTool(null)} />}{configuring && <IntegrationConfigDialog key={configuring.id} config={configuring} settings={settings} onSave={saveConfiguration} onClose={() => setConfiguring(null)} />}</>
+    return <IntegrationRow key={item.id} item={item} config={config} grpcStatus={item.id === 'grpc' ? grpcStatus : undefined} expanded={expanded === item.id} busy={busy === item.id} error={errors[item.id]} onExpand={() => setExpanded(expanded === item.id ? '' : item.id)} onOpen={() => open(item)} onConfigure={() => config && setConfiguring(config)} onRestart={() => void restart(item)} onManage={() => setGrpcManaging(true)} />
+  })}</div></section>{tool?.url && <ToolFrame tool={tool} onClose={() => setTool(null)} />}{configuring && <IntegrationConfigDialog key={configuring.id} config={configuring} settings={settings} onSave={saveConfiguration} onClose={() => setConfiguring(null)} />}{grpcManaging && grpcStatus && <GrpcInstallDialog status={grpcStatus} settings={settings} demoMode={demoMode} onSaveSettings={saveConfiguration} onStatus={setGrpcStatus} onRefresh={onRefresh} onClose={() => setGrpcManaging(false)} />}</>
+}
+
+function GrpcInstallDialog({ status, settings, demoMode, onSaveSettings, onStatus, onRefresh, onClose }: { status: GrpcInstallationStatus; settings: DashboardSettings; demoMode: boolean; onSaveSettings: (settings: DashboardSettings) => Promise<boolean>; onStatus: (status: GrpcInstallationStatus) => void; onRefresh: () => Promise<void>; onClose: () => void }) {
+  const config = settings.integrations.find(item => item.id === 'grpc')
+  const [host, setHost] = useState(config?.host || status.host || '127.0.0.1')
+  const [port, setPort] = useState(config?.port ?? status.port ?? 50051)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [result, setResult] = useState<GrpcInstallationResult | null>(null)
+  const install = async () => {
+    if (!host.trim() || port < 1 || port > 65535) { setError('Enter a valid host and TCP port.'); return }
+    setBusy(true); setError(''); setResult(null)
+    const next = { ...settings, integrations: settings.integrations.map(item => item.id === 'grpc' ? { ...item, host: host.trim(), port } : item) }
+    if (!await onSaveSettings(next)) { setError('Groundcrew could not save the DCS-gRPC endpoint.'); setBusy(false); return }
+    if (demoMode) {
+      const nextStatus = { ...status, installed: true, loaderConfigured: true, autostartConfigured: true, installedVersion: status.latestVersion, host: host.trim(), port }
+      const preview = { status: nextStatus, version: status.latestVersion ?? 'latest', sha256: 'preview', backupPath: null, dcsRestarted: false, warning: null }
+      setResult(preview); onStatus(nextStatus); setBusy(false); return
+    }
+    const response = await installGrpc()
+    if (!response.ok || !response.result) setError(response.error ?? 'DCS-gRPC could not be installed.')
+    else { setResult(response.result); onStatus(response.result.status); await onRefresh() }
+    setBusy(false)
+  }
+  const action = status.updateAvailable ? 'Update DCS-gRPC' : status.installed ? 'Repair installation' : 'Install DCS-gRPC'
+  return <div className="dialog-backdrop" role="presentation" onMouseDown={() => !busy && onClose()}><div className="integration-dialog grpc-dialog" role="dialog" aria-modal="true" aria-label="Install DCS-gRPC" onMouseDown={event => event.stopPropagation()}>
+    <header><div><span className="eyebrow">MANAGED INTEGRATION</span><h2>DCS-gRPC</h2><p>Official release {status.latestVersion ? `v${status.latestVersion}` : 'from GitHub'} · live mission data and server control</p></div><button className="icon-button" disabled={busy} onClick={onClose} aria-label="Close installer"><X size={19} /></button></header>
+    <div className="grpc-install-body">
+      <div className="grpc-install-summary"><span className="integration-mark"><Download size={20} /></span><div><strong>{status.installed ? `Version ${status.installedVersion ?? 'unknown'} installed` : 'Ready to install'}</strong><p>Groundcrew downloads the latest ZIP from the official DCS-gRPC GitHub release, validates its size and contents, then installs only the expected files.</p></div></div>
+      <div className="grpc-paths"><label><span>Saved Games destination</span><strong>{status.savedGamesPath || 'Not configured'}</strong></label><label><span>DCS loader file</span><strong>{status.missionScriptingPath || 'Not found'}</strong></label></div>
+      <div className="config-pair"><label><span>Listen host</span><input value={host} onChange={event => setHost(event.target.value)} placeholder="127.0.0.1" /></label><label><span>gRPC port</span><input type="number" min="1" max="65535" value={port} onChange={event => setPort(Number(event.target.value))} /></label></div>
+      <div className="grpc-install-steps"><div><strong>1</strong><span><b>Download & validate</b><small>Official release URL, exact asset name, size limits, safe ZIP paths, and required files.</small></span></div><div><strong>2</strong><span><b>Back up & install</b><small>Existing DCS-gRPC files and Lua configuration are retained in Groundcrew Backups.</small></span></div><div><strong>3</strong><span><b>Wire into DCS</b><small>MissionScripting.lua is patched safely and autostart is enabled. A running server is restarted.</small></span></div></div>
+      <div className="config-note">DCS-gRPC does not publish a checksum or code signature with its release. Groundcrew computes the downloaded SHA-256 for the installation record, but GitHub HTTPS remains the source of trust.</div>
+      {status.requirementError && <div className="integration-error"><ShieldAlert size={14} />{status.requirementError}</div>}
+      {error && <div className="integration-error"><ShieldAlert size={14} />{error}</div>}
+      {result && <div className="grpc-install-result"><Activity size={17} /><div><strong>DCS-gRPC {result.version} installed</strong><span>{result.sha256 === 'preview' ? 'Preview completed.' : `SHA-256 ${result.sha256}`}{result.backupPath ? ` · Backup: ${result.backupPath}` : ''}</span>{result.warning && <small>{result.warning}</small>}</div></div>}
+    </div>
+    <footer><button className="button ghost" disabled={busy} onClick={onClose}>{result ? 'Close' : 'Cancel'}</button>{!result && <button className="button primary" disabled={busy || !status.canInstall} onClick={() => void install()}>{busy ? <><RefreshCw className="spin" size={15} /> Installing…</> : <><Download size={15} /> {action}</>}</button>}</footer>
+  </div></div>
 }
 
 function IntegrationConfigDialog({ config, settings, onSave, onClose }: { config: IntegrationConfig; settings: DashboardSettings; onSave: (settings: DashboardSettings) => Promise<boolean>; onClose: () => void }) {
@@ -463,7 +512,7 @@ export default function App() {
           {page === 'missions' && <Missions settings={settings} demoMode={data.demoMode} olympusUrl={olympus?.url ?? settings.integrations.find(item => item.id === 'olympus')?.url} onSwitch={value => setPending({ kind: 'mission', value })} onOpenSettings={() => setPage('settings')} />}
           {page === 'serverConfig' && <ServerConfigurationPage demoMode={data.demoMode} onOpenSettings={() => setPage('settings')} />}
           {page === 'players' && <Players players={data.players} />}
-          {page === 'integrations' && <Integrations integrations={data.integrations} settings={settings} onSaveSettings={persistSettings} onRefresh={refreshSnapshot} />}
+          {page === 'integrations' && <Integrations integrations={data.integrations} settings={settings} demoMode={data.demoMode} onSaveSettings={persistSettings} onRefresh={refreshSnapshot} />}
           {page === 'chat' && <Chat data={data} />}
           {page === 'settings' && <SettingsPage settings={settings} onSave={persistSettings} />}
         </div>

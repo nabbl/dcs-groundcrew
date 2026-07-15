@@ -28,6 +28,32 @@ export interface Integration {
   configurable: boolean
 }
 
+export interface GrpcInstallationStatus {
+  installed: boolean
+  running: boolean
+  loaderConfigured: boolean
+  autostartConfigured: boolean
+  canInstall: boolean
+  installedVersion: string | null
+  latestVersion: string | null
+  updateAvailable: boolean
+  host: string
+  port: number
+  savedGamesPath: string
+  missionScriptingPath: string
+  publishedAt: string | null
+  requirementError: string | null
+}
+
+export interface GrpcInstallationResult {
+  status: GrpcInstallationStatus
+  version: string
+  sha256: string
+  backupPath: string | null
+  dcsRestarted: boolean
+  warning: string | null
+}
+
 export interface ChatMessage {
   id: string
   author: string

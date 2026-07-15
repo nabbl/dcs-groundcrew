@@ -68,6 +68,7 @@ public sealed class IntegrationSettings
         new() { Id = "olympus", Name = "DCS Olympus", Description = "Real-time mission control", Kind = "web-process", Port = 3000, Url = "http://127.0.0.1:3000" },
         new() { Id = "tacview", Name = "Tacview", Description = "Flight recording and real-time telemetry", Kind = "telemetry", Port = 42674 },
         new() { Id = "skyeye", Name = "SkyEye", Description = "AI-powered GCI", Kind = "process", SrsAddress = "127.0.0.1:5002", TelemetryAddress = "127.0.0.1:42674" },
+        new() { Id = "grpc", Name = "DCS-gRPC", Description = "Live mission data and server control API", Kind = "managed-service", Port = 50051 },
         new() { Id = "dks", Name = "Digital Kneeboard Simulator", Description = "Browser-based mission planning and kneeboards", Kind = "web", Url = "https://www.digitalkneeboardsimulator.com/" }
     };
 }
@@ -156,6 +157,28 @@ public sealed record DcsServerConfigurationUpdate(
     bool AllowPlayersPool,
     bool ServerCanScreenshot);
 public sealed record DcsServerConfigurationSaveResult(DcsServerConfiguration Configuration, string? BackupPath);
+public sealed record GrpcInstallationStatus(
+    bool Installed,
+    bool Running,
+    bool LoaderConfigured,
+    bool AutostartConfigured,
+    bool CanInstall,
+    string? InstalledVersion,
+    string? LatestVersion,
+    bool UpdateAvailable,
+    string Host,
+    int Port,
+    string SavedGamesPath,
+    string MissionScriptingPath,
+    string? PublishedAt,
+    string? RequirementError);
+public sealed record GrpcInstallationResult(
+    GrpcInstallationStatus Status,
+    string Version,
+    string Sha256,
+    string? BackupPath,
+    bool DcsRestarted,
+    string? Warning);
 public sealed record MissionSwitchRequest(string Path);
 public sealed record ChatSendRequest(string Message);
 public sealed record ModerationRequest(string PlayerId, string? Reason);

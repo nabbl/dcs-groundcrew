@@ -18,6 +18,17 @@ public sealed class IntegrationService
             : new HashSet<int>();
         return settings.Integrations.Select(item =>
         {
+            if (string.Equals(item.Id, "grpc", StringComparison.OrdinalIgnoreCase))
+            {
+                var grpcRoot = string.IsNullOrWhiteSpace(settings.SavedGamesPath) ? "" : Path.Combine(settings.SavedGamesPath, "Scripts", "DCS-gRPC");
+                var grpcInstalled = !string.IsNullOrWhiteSpace(settings.SavedGamesPath)
+                    && File.Exists(Path.Combine(grpcRoot, "grpc-mission.lua"))
+                    && File.Exists(Path.Combine(settings.SavedGamesPath, "Mods", "tech", "DCS-gRPC", "dcs_grpc.dll"))
+                    && File.Exists(Path.Combine(settings.SavedGamesPath, "Scripts", "Hooks", "DCS-gRPC.lua"));
+                var grpcVersion = ReadGrpcVersion(Path.Combine(grpcRoot, "version.lua"));
+                var grpcPortListening = item.Port is > 0 && listeningPorts.Contains(item.Port.Value);
+                return new IntegrationStatus(item.Id, item.Name, item.Description, item.Kind, grpcInstalled, grpcPortListening, grpcVersion, null, true);
+            }
             var executableInstalled = !string.IsNullOrWhiteSpace(item.ExecutablePath) && File.Exists(item.ExecutablePath);
             var configInstalled = !string.IsNullOrWhiteSpace(item.ConfigPath) && File.Exists(item.ConfigPath);
             var portListening = item.Port is > 0 && listeningPorts.Contains(item.Port.Value);
@@ -29,6 +40,22 @@ public sealed class IntegrationService
             try { version = executableInstalled ? FileVersionInfo.GetVersionInfo(item.ExecutablePath).FileVersion : null; } catch { }
             return new IntegrationStatus(item.Id, item.Name, item.Description, item.Kind, installed, process is not null || portListening, version, item.Url, true);
         }).ToList();
+    }
+
+    private static string? ReadGrpcVersion(string path)
+    {
+        try
+        {
+            if (!File.Exists(path)) return null;
+            var content = File.ReadAllText(path);
+            var marker = "GRPC.version";
+            var markerIndex = content.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+            if (markerIndex < 0) return null;
+            var quoteStart = content.IndexOf('"', markerIndex + marker.Length);
+            var quoteEnd = quoteStart < 0 ? -1 : content.IndexOf('"', quoteStart + 1);
+            return quoteStart >= 0 && quoteEnd > quoteStart ? content[(quoteStart + 1)..quoteEnd] : null;
+        }
+        catch { return null; }
     }
 
     public async Task ControlAsync(string id, string action)

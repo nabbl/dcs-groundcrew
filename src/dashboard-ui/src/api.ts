@@ -1,4 +1,4 @@
-import type { DashboardSettings, DashboardSnapshot, DcsServerConfiguration, DcsServerConfigurationSaveResult, DcsServerConfigurationUpdate, FileBrowserResult, FileSystemEntry, MissionLibraryResult, MissionReadinessReport } from './types'
+import type { DashboardSettings, DashboardSnapshot, DcsServerConfiguration, DcsServerConfigurationSaveResult, DcsServerConfigurationUpdate, FileBrowserResult, FileSystemEntry, GrpcInstallationResult, GrpcInstallationStatus, MissionLibraryResult, MissionReadinessReport } from './types'
 import { mockSnapshot } from './mockData'
 import { HubConnectionBuilder, HttpTransportType } from '@microsoft/signalr'
 
@@ -112,6 +112,23 @@ export async function integrationAction(id: string, action: 'start' | 'stop' | '
     return { ok: false, error: problem?.error ?? problem?.detail ?? `Could not ${action} this integration.` }
   } catch {
     return { ok: false, error: 'The dashboard backend is not reachable.' }
+  }
+}
+
+export async function getGrpcStatus(): Promise<GrpcInstallationStatus> {
+  const response = await fetch('/api/grpc/status')
+  if (!response.ok) throw new Error('Groundcrew could not inspect the DCS-gRPC installation.')
+  return await response.json() as GrpcInstallationStatus
+}
+
+export async function installGrpc(): Promise<{ ok: boolean; result?: GrpcInstallationResult; error?: string }> {
+  try {
+    const response = await fetch('/api/grpc/install', { method: 'POST' })
+    if (response.ok) return { ok: true, result: await response.json() as GrpcInstallationResult }
+    const problem = await response.json().catch(() => null) as { error?: string; detail?: string } | null
+    return { ok: false, error: problem?.error ?? problem?.detail ?? 'DCS-gRPC could not be installed.' }
+  } catch {
+    return { ok: false, error: 'The Groundcrew backend is not reachable.' }
   }
 }
 

@@ -18,10 +18,17 @@ builder.Host.UseWindowsService(options => options.ServiceName = "DCS Groundcrew"
 if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_URLS")))
     builder.WebHost.UseUrls(GetDefaultUrls());
 builder.Services.AddSignalR();
+builder.Services.AddHttpClient("github-releases", client =>
+{
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Groundcrew/0.1 (+https://github.com/nabbl/dcs-groundcrew)");
+    client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+    client.Timeout = TimeSpan.FromMinutes(3);
+});
 builder.Services.AddSingleton<SettingsStore>();
 builder.Services.AddSingleton<DcsProcessService>();
 builder.Services.AddSingleton<HostMetricsService>();
 builder.Services.AddSingleton<IntegrationService>();
+builder.Services.AddSingleton<GrpcInstallerService>();
 builder.Services.AddSingleton<DcsServerConfigurationService>();
 builder.Services.AddSingleton<MissionReadinessService>();
 builder.Services.AddScoped<SnapshotService>();
@@ -110,6 +117,16 @@ app.MapPost("/api/missions/switch", async (MissionSwitchRequest request, Setting
 });
 
 app.MapGet("/api/integrations", async (IntegrationService service) => Results.Ok(await service.GetStatusesAsync()));
+app.MapGet("/api/grpc/status", async (GrpcInstallerService service) => Results.Ok(await service.GetStatusAsync()));
+app.MapPost("/api/grpc/install", async (GrpcInstallerService service) =>
+{
+    try { return Results.Ok(await service.InstallLatestAsync()); }
+    catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
+    catch (InvalidDataException ex) { return Results.Problem(ex.Message, statusCode: 502); }
+    catch (HttpRequestException ex) { return Results.Problem($"The official DCS-gRPC release could not be downloaded: {ex.Message}", statusCode: 502); }
+    catch (UnauthorizedAccessException) { return Results.Problem("The Groundcrew service account cannot update the selected DCS folders.", statusCode: 403); }
+    catch (IOException ex) { return Results.Problem($"DCS-gRPC could not be installed: {ex.Message}", statusCode: 409); }
+});
 app.MapPost("/api/integrations/{id}/{action}", async (string id, string action, IntegrationService service) =>
 {
     if (action is not ("start" or "stop" or "restart")) return Results.BadRequest(new { error = "Action must be start, stop, or restart." });

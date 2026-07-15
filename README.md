@@ -19,6 +19,7 @@ Working now:
 - GUI editing for common `Config\serverSettings.lua` options, including server identity, connection cap, port, mission lifecycle, integrity checks, exports, voice chat, and player permissions
 - password-safe, surgical Lua updates that preserve mission lists and unknown settings and create a timestamped backup before writing
 - working per-integration configuration for executable/config paths, URLs, and network endpoints
+- managed DCS-gRPC installation, update, and repair from the official GitHub release, including release/ZIP validation, Saved Games deployment, `MissionScripting.lua` wiring, autostart configuration, version/port status, rollback, and timestamped backups
 - process and local-port status detection for SRS, Olympus, Tacview, and SkyEye, plus launch/restart controls where an executable is configured
 - Digital Kneeboard Simulator launch into its hosted sign-in page
 - embedded integration window with a new-tab fallback
@@ -29,12 +30,18 @@ Adapter work still required after DCS is installed:
 
 - use the local DCS Dedicated Server WebGUI interface for current players, server FPS, mission control, chat, kick, and ban
 - confirm the exact WebGUI command set against the installed DCS build before enabling mutations
-- add third-party installer/update workflows and, where useful, direct editing of each tool's native configuration file
+- add installer/update workflows for the remaining third-party tools and, where useful, direct editing of each tool's native configuration file
 - test iframe headers for Olympus and Digital Kneeboard; use a host-side reverse proxy or new tab where framing is blocked
 
 The API currently returns `501 Not Implemented` for chat and moderation instead of claiming those actions succeeded. Mission selection is stored and the process is restarted, but the DCS WebGUI adapter must be completed before mission switching should be considered production-ready.
 
 The server configuration page's **Maximum players** value is DCS's global connection cap. Groundcrew can summarize static Client and Player slots from each `.miz`, but changing those slots remains a DCS Mission Editor task. Runtime scripts may create behavior that cannot be determined safely without executing mission code, so Groundcrew reports recognized frameworks without trying to emulate Olympus or DCS itself.
+
+### DCS-gRPC installer
+
+Configure both the **DCS executable** and **Saved Games** paths under Settings, then open Integrations → DCS-gRPC. Groundcrew downloads the exact ZIP attached to the latest release of `DCS-gRPC/rust-server`, limits and validates the archive, and installs the expected package files into the configured Saved Games folder. It backs up and patches the DCS installation's `Scripts\MissionScripting.lua`, enables `autostart` in `Config\dcs-grpc.lua`, and restarts DCS only when it was running before the install.
+
+Existing package files and Lua files are retained under `Saved Games\Groundcrew Backups\DCS-gRPC`. Unknown `dcs-grpc.lua` settings are preserved. If Groundcrew cannot identify the official loader anchor or any installation step fails, it restores the previous files instead of guessing. Upstream currently publishes no checksum or code signature alongside the release; Groundcrew restricts downloads to the official GitHub repository and reports the SHA-256 it computes after download, but that hash is an installation record rather than independent publisher verification.
 
 ## Local UI preview
 

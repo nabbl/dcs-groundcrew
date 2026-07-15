@@ -219,6 +219,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .integration-detail > div:not(.integration-actions) { display: flex; flex-direction: column; gap: 5px; }
 .integration-detail span { color: #747a7d; font-size: 9px; text-transform: uppercase; }
 .integration-detail strong { font-size: 10px; font-weight: 500; }
+.integration-detail .grpc-health { grid-column: 1/-1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.grpc-health > span { min-height: 38px; padding: 9px 11px; display: flex; align-items: center; justify-content: space-between; color: #858b8e; background: #181b1d; border: 1px solid #303436; }
+.grpc-health > span::before { content: ''; width: 5px; height: 5px; margin-right: 7px; border-radius: 50%; background: #6d7376; box-shadow: 0 0 0 3px rgba(109,115,118,.1); }
+.grpc-health > span.ready::before { background: var(--green); box-shadow: 0 0 0 3px rgba(78,193,130,.1); }
+.grpc-health > span strong { margin-left: auto; color: #d8dbdc; }
 .integration-actions { grid-column: 1/-1; display: flex; gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; }
 .integration-error { grid-column: 1/-1; display: flex; align-items: center; gap: 7px; padding: 9px 11px; color: #e69a94; background: rgba(226,105,97,.07); border: 1px solid rgba(226,105,97,.18); font-size: 10px; }
 .integration-dialog { width: min(720px, 96vw); max-height: min(760px, 92vh); display: grid; grid-template-rows: auto 1fr auto; background: #191c1e; border: 1px solid #414649; box-shadow: 0 24px 90px rgba(0,0,0,.6); }
@@ -235,6 +240,28 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .config-pair { display: grid; grid-template-columns: 1fr 160px; gap: 14px; }
 .config-pair label { display: grid; gap: 7px; }
 .config-note { padding: 13px 14px; color: #999fa2; background: rgba(246,168,23,.045); border: 1px solid rgba(246,168,23,.15); font-size: 10px; line-height: 1.55; }
+.grpc-dialog { width: min(760px, 96vw); }
+.grpc-install-body { min-height: 0; overflow: auto; padding: 22px 23px; display: grid; gap: 16px; }
+.grpc-install-summary { display: flex; align-items: flex-start; gap: 14px; padding-bottom: 15px; border-bottom: 1px solid var(--line); }
+.grpc-install-summary .integration-mark { flex: 0 0 auto; }
+.grpc-install-summary strong { font: 700 13px "Arial Narrow", sans-serif; text-transform: uppercase; }
+.grpc-install-summary p { max-width: 610px; margin: 6px 0 0; color: #92979a; font-size: 10px; line-height: 1.55; }
+.grpc-paths { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.grpc-paths label { min-width: 0; padding: 11px 12px; display: grid; gap: 6px; background: #121416; border: 1px solid #303436; }
+.grpc-paths span { color: #73797c; font-size: 8px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.grpc-paths strong { overflow: hidden; color: #c5c9ca; font: 9px ui-monospace, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.grpc-install-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid #303436; }
+.grpc-install-steps > div { min-width: 0; padding: 13px; display: flex; gap: 10px; border-right: 1px solid #303436; }
+.grpc-install-steps > div:last-child { border-right: 0; }
+.grpc-install-steps > div > strong { width: 21px; height: 21px; flex: 0 0 auto; display: grid; place-items: center; color: #17191a; background: var(--amber); font-size: 9px; }
+.grpc-install-steps span { display: grid; gap: 4px; }
+.grpc-install-steps b { font-size: 9px; text-transform: uppercase; }
+.grpc-install-steps small { color: #858b8e; font-size: 9px; line-height: 1.45; }
+.grpc-install-result { padding: 12px 13px; display: flex; align-items: flex-start; gap: 10px; color: #9bd8b6; background: rgba(78,193,130,.06); border: 1px solid rgba(78,193,130,.2); }
+.grpc-install-result div { min-width: 0; display: grid; gap: 4px; }
+.grpc-install-result strong { font-size: 10px; text-transform: uppercase; }
+.grpc-install-result span { overflow-wrap: anywhere; color: #aeb4b1; font: 8px ui-monospace, monospace; }
+.grpc-install-result small { color: #e1b876; font-size: 9px; }
 .tool-frame { position: fixed; z-index: 80; inset: 18px 322px 18px 86px; display: grid; grid-template-rows: 51px 1fr 28px; background: #111315; border: 1px solid #42474a; box-shadow: 0 25px 90px rgba(0,0,0,.65); }
 .tool-frame header { display: flex; align-items: center; justify-content: space-between; padding: 0 14px; background: #1c1f21; border-bottom: 1px solid var(--line); }
 .tool-frame header > div { display: flex; align-items: center; gap: 10px; }
@@ -402,6 +429,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .integration-summary .status-label { grid-column: 2; }
   .integration-detail { margin-left: 22px; grid-template-columns: 1fr; }
   .integration-actions { flex-wrap: wrap; }
+  .integration-detail .grpc-health, .grpc-paths, .grpc-install-steps { grid-template-columns: 1fr; }
+  .grpc-install-steps > div { border-right: 0; border-bottom: 1px solid #303436; }
+  .grpc-install-steps > div:last-child { border-bottom: 0; }
   .config-pair { grid-template-columns: 1fr; }
   .chat-message { grid-template-columns: 40px 1fr; }
   .chat-message p { grid-column: 2; }
