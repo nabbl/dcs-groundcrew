@@ -62,13 +62,14 @@ public sealed class IntegrationSettings
     public string SrsAddress { get; set; } = "";
     public string TelemetryAddress { get; set; } = "";
     public string? Url { get; set; }
+    public bool Remote { get; set; }
 
     public static List<IntegrationSettings> Defaults() => new()
     {
         new() { Id = "srs", Name = "SimpleRadio Standalone", Description = "Voice communications", Kind = "network-process", Port = 5002 },
         new() { Id = "olympus", Name = "DCS Olympus", Description = "Real-time mission control", Kind = "web-process", Port = 3000, Url = "http://127.0.0.1:3000" },
         new() { Id = "tacview", Name = "Tacview", Description = "Flight recording and real-time telemetry", Kind = "telemetry", Port = 42674 },
-        new() { Id = "skyeye", Name = "SkyEye", Description = "AI-powered GCI", Kind = "process", SrsAddress = "127.0.0.1:5002", TelemetryAddress = "127.0.0.1:42674" },
+        new() { Id = "skyeye", Name = "SkyEye", Description = "AI-powered GCI", Kind = "process", SrsAddress = "127.0.0.1:5002", TelemetryAddress = "127.0.0.1:42674", Remote = false },
         new() { Id = "grpc", Name = "DCS-gRPC", Description = "Live mission data and server control API", Kind = "managed-service", Port = 50051 },
         new() { Id = "dks", Name = "Digital Kneeboard Simulator", Description = "Browser-based mission planning and kneeboards", Kind = "web", Url = "https://www.digitalkneeboardsimulator.com/" }
     };

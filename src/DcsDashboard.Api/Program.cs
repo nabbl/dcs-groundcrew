@@ -15,6 +15,7 @@ if (OperatingSystem.IsWindows() && (launcherMode || !serviceMode))
 }
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Logging.AddFilter("System.Net.Http.HttpClient.integration-health", LogLevel.Warning);
 builder.Host.UseWindowsService(options => options.ServiceName = "DCS Groundcrew");
 if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_URLS")))
     builder.WebHost.UseUrls(GetDefaultUrls());
@@ -24,6 +25,11 @@ builder.Services.AddHttpClient("github-releases", client =>
     client.DefaultRequestHeaders.UserAgent.ParseAdd("Groundcrew/0.1 (+https://github.com/nabbl/dcs-groundcrew)");
     client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
     client.Timeout = TimeSpan.FromMinutes(3);
+});
+builder.Services.AddHttpClient("integration-health", client =>
+{
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Groundcrew/0.1 (+https://github.com/nabbl/dcs-groundcrew)");
+    client.Timeout = TimeSpan.FromSeconds(2);
 });
 builder.Services.AddSingleton<SettingsStore>();
 builder.Services.AddSingleton<ModerationAuditStore>();

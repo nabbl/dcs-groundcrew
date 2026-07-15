@@ -132,6 +132,7 @@ export interface DashboardSettings {
     srsAddress: string
     telemetryAddress: string
     url?: string
+    remote?: boolean
   }>
 }
 

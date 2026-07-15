@@ -59,10 +59,11 @@ function PlayerRow({ player, compact = false, onModerate }: { player: Player; co
 function IntegrationRow({ item, config, grpcStatus, expanded, busy, error, onExpand, onOpen, onConfigure, onRestart, onManage }: { item: Integration; config?: IntegrationConfig; grpcStatus?: GrpcInstallationStatus | null; expanded: boolean; busy: boolean; error?: string; onExpand: () => void; onOpen: () => void; onConfigure: () => void; onRestart: () => void; onManage: () => void }) {
   const webOnly = item.kind === 'web'
   const managedGrpc = item.id === 'grpc'
+  const remoteSkyEye = item.id === 'skyeye' && config?.remote
   const installed = managedGrpc && grpcStatus ? grpcStatus.installed : item.installed
   const running = item.running
   const endpoint = item.url ?? (config?.port ? `${config.host || '127.0.0.1'}:${config.port}` : undefined)
-  const status = webOnly ? (installed ? 'Web app' : 'Not configured') : running ? 'Running' : installed ? 'Installed' : managedGrpc ? 'Not installed' : 'Not configured'
+  const status = remoteSkyEye ? running ? 'Remote online' : installed ? 'Remote offline' : 'Not configured' : webOnly ? (installed ? 'Web app' : 'Not configured') : running ? 'Running' : installed ? 'Installed' : managedGrpc ? 'Not installed' : 'Not configured'
   return (
     <article className={`integration-row ${expanded ? 'expanded' : ''}`}>
       <button className="integration-summary" onClick={onExpand}>
@@ -79,7 +80,7 @@ function IntegrationRow({ item, config, grpcStatus, expanded, busy, error, onExp
           <div><span>{webOnly || item.kind === 'web-process' ? 'Web interface' : 'Endpoint'}</span><strong>{endpoint ?? 'Not configured'}</strong></div>
           {managedGrpc && grpcStatus && <div className="grpc-health"><span className={grpcStatus.loaderConfigured ? 'ready' : ''}>Mission loader <strong>{grpcStatus.loaderConfigured ? 'Ready' : 'Missing'}</strong></span><span className={grpcStatus.autostartConfigured ? 'ready' : ''}>Autostart <strong>{grpcStatus.autostartConfigured ? 'On' : 'Off'}</strong></span><span className={!grpcStatus.updateAvailable ? 'ready' : ''}>Latest <strong>{grpcStatus.latestVersion ?? 'Unknown'}</strong></span></div>}
           <div className="integration-actions">
-            {!webOnly && item.kind !== 'telemetry' && !managedGrpc && installed && <button className="button outline" disabled={busy} onClick={onRestart}><RefreshCw className={busy ? 'spin' : ''} size={15} /> Restart</button>}
+            {!webOnly && item.kind !== 'telemetry' && !managedGrpc && !remoteSkyEye && installed && <button className="button outline" disabled={busy} onClick={onRestart}><RefreshCw className={busy ? 'spin' : ''} size={15} /> Restart</button>}
             {managedGrpc ? <button className={installed ? 'button ghost' : 'button primary'} onClick={onManage}><Download size={15} /> {grpcStatus?.updateAvailable ? 'Update' : installed ? 'Repair / configure' : 'Install DCS-gRPC'}</button> : <button className={installed ? 'button ghost' : 'button outline'} onClick={onConfigure}>{installed ? <Settings size={15} /> : <HardDrive size={15} />} {installed ? 'Configuration' : 'Configure'}</button>}
             {item.url && <button className="button ghost" onClick={onOpen}><ExternalLink size={15} /> {item.id === 'dks' ? 'Open & sign in' : 'Open tool'}</button>}
           </div>
@@ -403,28 +404,49 @@ function IntegrationConfigDialog({ config, settings, onSave, onClose }: { config
   const [browsing, setBrowsing] = useState<'executablePath' | 'configPath' | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const update = <K extends keyof IntegrationConfig>(key: K, next: IntegrationConfig[K]) => setValue(current => ({ ...current, [key]: next }))
+  const update = <K extends keyof IntegrationConfig>(key: K, next: IntegrationConfig[K]) => {
+    setValue(current => ({ ...current, [key]: next }))
+    setError('')
+  }
   const save = async () => {
+    if (value.id === 'skyeye' && value.remote) {
+      try {
+        const remoteUrl = new URL(value.url ?? '')
+        if (remoteUrl.protocol !== 'http:' && remoteUrl.protocol !== 'https:') throw new Error('Unsupported protocol')
+      } catch {
+        setError('Enter a valid HTTP or HTTPS URL for the remote SkyEye health endpoint.')
+        return
+      }
+    }
     setSaving(true); setError('')
     const next = { ...settings, integrations: settings.integrations.map(item => item.id === value.id ? value : item) }
     if (await onSave(next)) onClose()
     else setError('Groundcrew could not save this configuration.')
     setSaving(false)
   }
+  const remoteSkyEye = value.id === 'skyeye' && value.remote === true
+  const testUrl = (() => {
+    if (!value.url || !(value.kind === 'web' || value.kind === 'web-process' || remoteSkyEye)) return null
+    try {
+      const candidate = new URL(value.url)
+      return candidate.protocol === 'http:' || candidate.protocol === 'https:' ? value.url : null
+    } catch { return null }
+  })()
   const browsePath = browsing ? value[browsing] : ''
-  return <><div className="dialog-backdrop" role="presentation" onMouseDown={onClose}><div className="integration-dialog" role="dialog" aria-modal="true" onMouseDown={event => event.stopPropagation()}>
+  return <><div className="dialog-backdrop" role="presentation" onMouseDown={onClose}><div className="integration-dialog" role="dialog" aria-modal="true" aria-label={`Configure ${value.name}`} onMouseDown={event => event.stopPropagation()}>
     <header><div><span className="eyebrow">INTEGRATION CONFIGURATION</span><h2>{value.name}</h2><p>{value.description}</p></div><button className="icon-button" onClick={onClose} aria-label="Close configuration"><X size={19} /></button></header>
     <div className="config-form">
-      {value.kind !== 'web' && value.id !== 'tacview' && <ConfigPathField label="Executable" value={value.executablePath} onChange={next => update('executablePath', next)} onBrowse={() => setBrowsing('executablePath')} />}
-      {value.kind !== 'web' && <ConfigPathField label={value.id === 'tacview' ? 'DCS options file' : 'Configuration file'} value={value.configPath} onChange={next => update('configPath', next)} onBrowse={() => setBrowsing('configPath')} />}
+      {value.id === 'skyeye' && <div className="integration-mode-toggle"><ConfigToggle label="Remote SkyEye" detail="SkyEye runs on another computer and is monitored through a URL." checked={remoteSkyEye} onChange={next => update('remote', next)} /></div>}
+      {value.kind !== 'web' && value.id !== 'tacview' && !remoteSkyEye && <ConfigPathField label="Executable" value={value.executablePath} onChange={next => update('executablePath', next)} onBrowse={() => setBrowsing('executablePath')} />}
+      {value.kind !== 'web' && !remoteSkyEye && <ConfigPathField label={value.id === 'tacview' ? 'DCS options file' : 'Configuration file'} value={value.configPath} onChange={next => update('configPath', next)} onBrowse={() => setBrowsing('configPath')} />}
       {(value.id === 'srs' || value.id === 'olympus' || value.id === 'tacview') && <div className="config-pair"><label><span>Host</span><input value={value.host} onChange={event => update('host', event.target.value)} placeholder="127.0.0.1" /></label><label><span>Port</span><input type="number" min="1" max="65535" value={value.port ?? ''} onChange={event => update('port', event.target.value ? Number(event.target.value) : undefined)} /></label></div>}
-      {value.id === 'skyeye' && <><label className="config-field"><span>SRS server address</span><input value={value.srsAddress} onChange={event => update('srsAddress', event.target.value)} placeholder="127.0.0.1:5002" /></label><label className="config-field"><span>Tacview telemetry address</span><input value={value.telemetryAddress} onChange={event => update('telemetryAddress', event.target.value)} placeholder="127.0.0.1:42674" /></label></>}
-      {(value.kind === 'web' || value.kind === 'web-process') && <label className="config-field"><span>Web URL</span><input value={value.url ?? ''} onChange={event => update('url', event.target.value)} placeholder="http://127.0.0.1:3000" /></label>}
-      {value.kind !== 'web' && value.id !== 'tacview' && <label className="config-field"><span>Launch arguments</span><input value={value.arguments} onChange={event => update('arguments', event.target.value)} placeholder={value.id === 'skyeye' ? '--config-file config.yaml' : 'Optional'} /></label>}
-      <div className="config-note">{value.id === 'srs' && 'SRS normally listens on TCP and UDP port 5002. Groundcrew detects the running service from the process or local TCP listener.'}{value.id === 'olympus' && 'Olympus normally exposes its frontend over HTTP on port 3000. The URL is used for the embedded tool view.'}{value.id === 'tacview' && 'Tacview real-time telemetry defaults to TCP 42674. Recording storage is configured separately under Server paths.'}{value.id === 'skyeye' && 'SkyEye connects to both SRS and Tacview. Its Windows config.yaml normally sits beside skyeye.exe.'}{value.id === 'dks' && 'DKS is a hosted web application. Groundcrew opens it in a new browser tab so you can sign in with Discord or Google.'}</div>
+      {value.id === 'skyeye' && !remoteSkyEye && <><label className="config-field"><span>SRS server address</span><input value={value.srsAddress} onChange={event => update('srsAddress', event.target.value)} placeholder="127.0.0.1:5002" /></label><label className="config-field"><span>Tacview telemetry address</span><input value={value.telemetryAddress} onChange={event => update('telemetryAddress', event.target.value)} placeholder="127.0.0.1:42674" /></label></>}
+      {(value.kind === 'web' || value.kind === 'web-process' || remoteSkyEye) && <label className="config-field"><span>{remoteSkyEye ? 'Remote health or management URL' : 'Web URL'}</span><input type="url" value={value.url ?? ''} onChange={event => update('url', event.target.value)} placeholder={remoteSkyEye ? 'http://skyeye-host:8080/health' : 'http://127.0.0.1:3000'} /></label>}
+      {value.kind !== 'web' && value.id !== 'tacview' && !remoteSkyEye && <label className="config-field"><span>Launch arguments</span><input value={value.arguments} onChange={event => update('arguments', event.target.value)} placeholder={value.id === 'skyeye' ? '--config-file config.yaml' : 'Optional'} /></label>}
+      <div className="config-note">{value.id === 'srs' && 'SRS normally listens on TCP and UDP port 5002. Groundcrew detects the running service from the process or local TCP listener.'}{value.id === 'olympus' && 'Olympus normally exposes its frontend over HTTP on port 3000. The URL is used for the embedded tool view.'}{value.id === 'tacview' && 'Tacview real-time telemetry defaults to TCP 42674. Recording storage is configured separately under Server paths.'}{value.id === 'skyeye' && (remoteSkyEye ? 'Groundcrew cannot manage the process on another computer. It sends a lightweight request to this URL and reports SkyEye as online when the remote endpoint responds. SkyEye does not expose a health URL by default, so use an endpoint or reverse proxy on the remote host.' : 'SkyEye connects to both SRS and Tacview. Its Windows config.yaml normally sits beside skyeye.exe.')}{value.id === 'dks' && 'DKS is a hosted web application. Groundcrew opens it in a new browser tab so you can sign in with Discord or Google.'}</div>
       {error && <div className="integration-error"><ShieldAlert size={14} />{error}</div>}
     </div>
-    <footer><button className="button ghost" onClick={onClose}>Cancel</button>{value.url && <a className="button outline" href={value.url} target="_blank" rel="noreferrer"><ExternalLink size={15} /> Test URL</a>}<button className="button primary" disabled={saving} onClick={() => void save()}>{saving ? 'Saving…' : 'Save configuration'}</button></footer>
+    <footer><button className="button ghost" onClick={onClose}>Cancel</button>{testUrl && <a className="button outline" href={testUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} /> Test URL</a>}<button className="button primary" disabled={saving} onClick={() => void save()}>{saving ? 'Saving…' : 'Save configuration'}</button></footer>
   </div></div>{browsing && <FileBrowserDialog title={`Select ${browsing === 'executablePath' ? 'executable' : 'configuration file'}`} initialPath={browsePath.replace(/[\\/][^\\/]+$/, '') || undefined} extension={browsing === 'executablePath' ? '.exe' : undefined} onSelect={path => { update(browsing, path); setBrowsing(null) }} onClose={() => setBrowsing(null)} />}</>
 }
 
