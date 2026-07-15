@@ -63,6 +63,7 @@ public sealed class IntegrationSettings
     public string TelemetryAddress { get; set; } = "";
     public string? Url { get; set; }
     public bool Remote { get; set; }
+    public string RemoteHost { get; set; } = "";
 
     public static List<IntegrationSettings> Defaults() => new()
     {

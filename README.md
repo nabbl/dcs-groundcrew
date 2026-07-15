@@ -23,7 +23,7 @@ Working now:
 - resilient DCS-gRPC live-data adapter for health/version, active mission, pause state, mission time, simulation FPS, connected players, ping/coalition/airframe details, incoming chat, and outgoing administrator chat
 - DCS-gRPC moderation controls for kick, temporary ban, and move-to-spectators, with confirmation, operator reasons, failure reporting, and a persistent SQLite audit trail
 - process and local-port status detection for SRS, Olympus, Tacview, and SkyEye, plus launch/restart controls where an executable is configured
-- local or remote SkyEye configuration; remote instances use a configurable HTTP(S) health/management URL for reachability and browser access without exposing local process controls
+- local or remote SkyEye configuration; remote instances use a hostname/IP reachability check with an optional management URL and do not expose local process controls
 - Digital Kneeboard Simulator launch into its hosted sign-in page
 - embedded integration window with a new-tab fallback
 - preview data when the frontend is run without the Windows service

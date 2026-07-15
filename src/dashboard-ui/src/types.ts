@@ -133,6 +133,7 @@ export interface DashboardSettings {
     telemetryAddress: string
     url?: string
     remote?: boolean
+    remoteHost?: string
   }>
 }
 

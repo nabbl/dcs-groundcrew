@@ -10,13 +10,11 @@ public sealed class IntegrationService
 {
     private readonly SettingsStore _store;
     private readonly DcsGrpcLiveService _grpc;
-    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ConcurrentDictionary<string, RemoteProbe> _remoteProbes = new(StringComparer.OrdinalIgnoreCase);
-    public IntegrationService(SettingsStore store, DcsGrpcLiveService grpc, IHttpClientFactory httpClientFactory)
+    public IntegrationService(SettingsStore store, DcsGrpcLiveService grpc)
     {
         _store = store;
         _grpc = grpc;
-        _httpClientFactory = httpClientFactory;
     }
 
     public async Task<IReadOnlyList<IntegrationStatus>> GetStatusesAsync(CancellationToken cancellationToken = default)
@@ -42,9 +40,10 @@ public sealed class IntegrationService
             }
             if (string.Equals(item.Id, "skyeye", StringComparison.OrdinalIgnoreCase) && item.Remote)
             {
+                var remoteHost = ResolveRemoteHost(item);
                 var remoteUrl = NormalizeRemoteUrl(item.Url);
-                var remoteRunning = remoteUrl is not null && await ProbeRemoteAsync(item.Id, remoteUrl, cancellationToken);
-                statuses.Add(new IntegrationStatus(item.Id, item.Name, item.Description, item.Kind, remoteUrl is not null, remoteRunning, null, remoteUrl, true));
+                var remoteRunning = remoteHost is not null && await ProbeRemoteAsync(item.Id, remoteHost, cancellationToken);
+                statuses.Add(new IntegrationStatus(item.Id, item.Name, item.Description, item.Kind, remoteHost is not null, remoteRunning, null, remoteUrl, true));
                 continue;
             }
             var executableInstalled = !string.IsNullOrWhiteSpace(item.ExecutablePath) && File.Exists(item.ExecutablePath);
@@ -62,24 +61,40 @@ public sealed class IntegrationService
         return statuses;
     }
 
-    private async Task<bool> ProbeRemoteAsync(string id, string url, CancellationToken cancellationToken)
+    private async Task<bool> ProbeRemoteAsync(string id, string host, CancellationToken cancellationToken)
     {
         if (_remoteProbes.TryGetValue(id, out var cached)
-            && string.Equals(cached.Url, url, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(cached.Host, host, StringComparison.OrdinalIgnoreCase)
             && DateTimeOffset.UtcNow - cached.CheckedAt < TimeSpan.FromSeconds(15)) return cached.Running;
 
         var running = false;
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Head, url);
-            using var response = await _httpClientFactory.CreateClient("integration-health")
-                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-            running = true;
+            using var ping = new Ping();
+            var reply = await ping.SendPingAsync(host, 2_000).WaitAsync(cancellationToken);
+            running = reply.Status == IPStatus.Success;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch { }
-        _remoteProbes[id] = new RemoteProbe(url, running, DateTimeOffset.UtcNow);
+        _remoteProbes[id] = new RemoteProbe(host, running, DateTimeOffset.UtcNow);
         return running;
+    }
+
+    private static string? ResolveRemoteHost(IntegrationSettings item)
+    {
+        var configured = NormalizeRemoteHost(item.RemoteHost);
+        if (configured is not null) return configured;
+        var legacyUrl = NormalizeRemoteUrl(item.Url);
+        return legacyUrl is not null && Uri.TryCreate(legacyUrl, UriKind.Absolute, out var uri) ? uri.DnsSafeHost : null;
+    }
+
+    private static string? NormalizeRemoteHost(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var host = value.Trim();
+        if (host.Length > 253 || host.Any(char.IsWhiteSpace) || host.Contains('/') || host.Contains('\\')) return null;
+        if (host.StartsWith('[') && host.EndsWith(']')) host = host[1..^1];
+        return host.Length > 0 ? host : null;
     }
 
     private static string? NormalizeRemoteUrl(string? value)
@@ -88,7 +103,7 @@ public sealed class IntegrationService
         return uri.Scheme is "http" or "https" ? uri.ToString() : null;
     }
 
-    private sealed record RemoteProbe(string Url, bool Running, DateTimeOffset CheckedAt);
+    private sealed record RemoteProbe(string Host, bool Running, DateTimeOffset CheckedAt);
 
     private static string? ReadGrpcVersion(string path)
     {
