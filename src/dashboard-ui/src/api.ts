@@ -1,4 +1,4 @@
-import type { DashboardSettings, DashboardSnapshot, DcsServerConfiguration, DcsServerConfigurationSaveResult, DcsServerConfigurationUpdate, FileBrowserResult, FileSystemEntry, GrpcInstallationResult, GrpcInstallationStatus, MissionLibraryResult, MissionReadinessReport, ModerationAction, ModerationAuditEntry } from './types'
+import type { DashboardSettings, DashboardSnapshot, DcsServerConfiguration, DcsServerConfigurationSaveResult, DcsServerConfigurationUpdate, DcsUpdateStatus, FileBrowserResult, FileSystemEntry, GrpcInstallationResult, GrpcInstallationStatus, MissionLibraryResult, MissionReadinessReport, ModerationAction, ModerationAuditEntry } from './types'
 import { mockSnapshot } from './mockData'
 import { HubConnectionBuilder, HttpTransportType } from '@microsoft/signalr'
 
@@ -20,6 +20,30 @@ export async function serverAction(action: 'start' | 'stop' | 'restart'): Promis
     await new Promise(resolve => window.setTimeout(resolve, 600))
     return true
   }
+}
+
+export async function getDcsUpdateStatus(): Promise<DcsUpdateStatus> {
+  const response = await fetch('/api/dcs-update/status')
+  if (!response.ok) throw new Error('Groundcrew could not inspect the DCS updater.')
+  return await response.json() as DcsUpdateStatus
+}
+
+export async function checkDcsUpdate(): Promise<{ ok: boolean; status?: DcsUpdateStatus; error?: string }> {
+  try {
+    const response = await fetch('/api/dcs-update/check', { method: 'POST' })
+    if (response.ok) return { ok: true, status: await response.json() as DcsUpdateStatus }
+    const problem = await response.json().catch(() => null) as { error?: string; detail?: string } | null
+    return { ok: false, error: problem?.error ?? problem?.detail ?? 'The update check failed.' }
+  } catch { return { ok: false, error: 'The Groundcrew backend is not reachable.' } }
+}
+
+export async function applyDcsUpdate(): Promise<{ ok: boolean; status?: DcsUpdateStatus; error?: string }> {
+  try {
+    const response = await fetch('/api/dcs-update/apply', { method: 'POST' })
+    if (response.ok) return { ok: true, status: await response.json() as DcsUpdateStatus }
+    const problem = await response.json().catch(() => null) as { error?: string; detail?: string } | null
+    return { ok: false, error: problem?.error ?? problem?.detail ?? 'The DCS update could not be started.' }
+  } catch { return { ok: false, error: 'The Groundcrew backend is not reachable.' } }
 }
 
 export function subscribeToSnapshots(onSnapshot: (snapshot: DashboardSnapshot) => void) {

@@ -182,6 +182,18 @@ public sealed record GrpcInstallationResult(
     string? BackupPath,
     bool DcsRestarted,
     string? Warning);
+public sealed record DcsUpdateStatus(
+    string? InstalledVersion,
+    string? LatestVersion,
+    bool UpdateAvailable,
+    bool CanUpdate,
+    bool IsChecking,
+    bool IsUpdating,
+    DateTimeOffset? LastCheckedAt,
+    string SourceUrl,
+    string? UpdaterPath,
+    string? Message,
+    string? Error);
 public sealed record MissionSwitchRequest(string Path);
 public sealed record ChatSendRequest(string Message);
 public sealed record ModerationRequest(string? PlayerName, string? Reason, uint? DurationSeconds);

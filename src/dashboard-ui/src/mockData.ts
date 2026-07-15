@@ -1,4 +1,4 @@
-import type { DashboardSettings, DashboardSnapshot, DcsServerConfiguration, GrpcInstallationStatus, MissionLibraryResult, MissionReadinessReport } from './types'
+import type { DashboardSettings, DashboardSnapshot, DcsServerConfiguration, DcsUpdateStatus, GrpcInstallationStatus, MissionLibraryResult, MissionReadinessReport } from './types'
 
 export const mockSettings: DashboardSettings = {
   serverName: 'DCS SERVER ONE',
@@ -113,6 +113,20 @@ export const mockGrpcStatus: GrpcInstallationStatus = {
   missionScriptingPath: 'C:\\Program Files\\Eagle Dynamics\\DCS World Server\\Scripts\\MissionScripting.lua',
   publishedAt: '2024-11-05T18:35:00Z',
   requirementError: null,
+}
+
+export const mockDcsUpdateStatus: DcsUpdateStatus = {
+  installedVersion: '2.9.18.12722',
+  latestVersion: '2.9.27.25340.1',
+  updateAvailable: true,
+  canUpdate: true,
+  isChecking: false,
+  isUpdating: false,
+  lastCheckedAt: '2026-07-15T08:30:00Z',
+  sourceUrl: 'https://updates.digitalcombatsimulator.com/',
+  updaterPath: 'C:\\Program Files\\Eagle Dynamics\\DCS World Server\\bin\\DCS_updater.exe',
+  message: 'DCS 2.9.27.25340.1 is available.',
+  error: null,
 }
 
 export const mockSnapshot: DashboardSnapshot = {

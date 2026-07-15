@@ -68,6 +68,20 @@ export interface GrpcInstallationResult {
   warning: string | null
 }
 
+export interface DcsUpdateStatus {
+  installedVersion: string | null
+  latestVersion: string | null
+  updateAvailable: boolean
+  canUpdate: boolean
+  isChecking: boolean
+  isUpdating: boolean
+  lastCheckedAt: string | null
+  sourceUrl: string
+  updaterPath: string | null
+  message: string | null
+  error: string | null
+}
+
 export interface ChatMessage {
   id: string
   author: string

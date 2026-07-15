@@ -9,6 +9,7 @@ The repository contains a working React/TypeScript interface and an ASP.NET Core
 Working now:
 
 - DCS process discovery plus start, stop, and restart controls
+- startup and six-hour DCS release checks against Eagle Dynamics' official updates page, plus a manual check and confirmed stop/update/restart workflow through the installation's own `DCS_updater.exe`
 - live SignalR snapshots with polling fallback
 - host CPU, memory, disk, DCS working-set, DCS CPU, and process uptime collection
 - SQLite-backed host configuration
@@ -45,6 +46,12 @@ The server configuration page's **Maximum players** value is DCS's global connec
 Configure both the **DCS executable** and **Saved Games** paths under Settings, then open Integrations → DCS-gRPC. Groundcrew downloads the exact ZIP attached to the latest release of `DCS-gRPC/rust-server`, limits and validates the archive, and installs the expected package files into the configured Saved Games folder. It backs up and patches the DCS installation's `Scripts\MissionScripting.lua`, enables `autostart` in `Config\dcs-grpc.lua`, and restarts DCS only when it was running before the install.
 
 Existing package files and Lua files are retained under `Saved Games\Groundcrew Backups\DCS-gRPC`. Unknown `dcs-grpc.lua` settings are preserved. If Groundcrew cannot identify the official loader anchor or any installation step fails, it restores the previous files instead of guessing. Upstream currently publishes no checksum or code signature alongside the release; Groundcrew restricts downloads to the official GitHub repository and reports the SHA-256 it computes after download, but that hash is an installation record rather than independent publisher verification.
+
+### DCS updates
+
+Groundcrew checks the official Eagle Dynamics updates page shortly after the service starts and every six hours after that. The right-hand instance rail can also run an immediate check. When a newer build is available, **Update DCS** asks for confirmation, stops the dedicated server, runs that installation's `DCS_updater.exe --quiet update`, verifies the installed executable version, and restarts DCS only if it was running before the update. The updater retains the DCS installation's configured release channel; Groundcrew does not replace or rewrite `autoupdate.cfg`.
+
+Update-page outages and unrecognized responses are contained as status errors and do not affect DCS controls or dashboard snapshots. Groundcrew never applies an update automatically.
 
 ## Local UI preview
 

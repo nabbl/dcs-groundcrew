@@ -6,9 +6,9 @@ import {
   Play, PlugZap, Power, Radio, RefreshCw, RotateCcw, Send, Server, Settings,
   ShieldAlert, Square, Users, X, Info,
 } from 'lucide-react'
-import { browseServer, getGrpcStatus, getMissionLibrary, getServerConfiguration, getSettings, getSnapshot, inspectMission, installGrpc, integrationAction, moderatePlayer, saveServerConfiguration, saveSettings, sendChatMessage, serverAction, subscribeToSnapshots, switchMission } from './api'
-import { mockGrpcStatus, mockMissionLibrary, mockMissionReadiness, mockServerConfiguration, mockSettings, mockSnapshot } from './mockData'
-import type { DashboardSettings, DashboardSnapshot, DcsServerConfiguration, DcsServerConfigurationUpdate, FileBrowserResult, GrpcInstallationResult, GrpcInstallationStatus, Integration, MissionFile, MissionLibraryResult, MissionReadinessReport, ModerationAction, Player, ServerState } from './types'
+import { applyDcsUpdate, browseServer, checkDcsUpdate, getDcsUpdateStatus, getGrpcStatus, getMissionLibrary, getServerConfiguration, getSettings, getSnapshot, inspectMission, installGrpc, integrationAction, moderatePlayer, saveServerConfiguration, saveSettings, sendChatMessage, serverAction, subscribeToSnapshots, switchMission } from './api'
+import { mockDcsUpdateStatus, mockGrpcStatus, mockMissionLibrary, mockMissionReadiness, mockServerConfiguration, mockSettings, mockSnapshot } from './mockData'
+import type { DashboardSettings, DashboardSnapshot, DcsServerConfiguration, DcsServerConfigurationUpdate, DcsUpdateStatus, FileBrowserResult, GrpcInstallationResult, GrpcInstallationStatus, Integration, MissionFile, MissionLibraryResult, MissionReadinessReport, ModerationAction, Player, ServerState } from './types'
 
 type Page = 'overview' | 'missions' | 'serverConfig' | 'players' | 'integrations' | 'chat' | 'settings'
 
@@ -531,22 +531,47 @@ function ConfirmDialog({ title, body, action, danger, onConfirm, onClose }: { ti
   return <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}><div className="dialog" role="dialog" aria-modal="true" onMouseDown={e => e.stopPropagation()}><button className="dialog-close" onClick={onClose}><X size={18} /></button><span className={`dialog-icon ${danger ? 'danger' : ''}`}>{danger ? <ShieldAlert /> : <RotateCcw />}</span><h2>{title}</h2><p>{body}</p><div className="dialog-actions"><button className="button ghost" onClick={onClose}>Cancel</button><button className={`button ${danger ? 'danger' : 'primary'}`} onClick={onConfirm}>{action}</button></div></div></div>
 }
 
+function DcsUpdaterCard({ status, onCheck, onUpdate }: { status: DcsUpdateStatus | null; onCheck: () => void; onUpdate: () => void }) {
+  const working = status?.isChecking || status?.isUpdating
+  const checked = status?.lastCheckedAt ? new Date(status.lastCheckedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Not checked yet'
+  return <section className={`dcs-update-card ${status?.updateAvailable ? 'available' : ''}`}>
+    <header><div><span className="eyebrow">DCS RELEASE</span><strong>{status?.isUpdating ? 'Installing update' : status?.updateAvailable ? 'Update available' : status?.latestVersion ? 'Up to date' : 'Version check'}</strong></div>{status?.updateAvailable && !status.isUpdating && <span className="update-badge">NEW</span>}</header>
+    <div className="version-pair"><span>Installed <strong>{status?.installedVersion ?? 'Unknown'}</strong></span><ChevronRight size={15} /><span>Latest <strong>{status?.latestVersion ?? 'Unknown'}</strong></span></div>
+    {status?.isUpdating && <div className="update-progress"><i /><span>{status.message ?? 'DCS_updater is working…'}</span></div>}
+    {!status?.isUpdating && status?.error && <p className="update-note error"><ShieldAlert size={14} />{status.error}</p>}
+    {!status?.isUpdating && !status?.error && <p className="update-note">Last checked: {checked}</p>}
+    <div className="update-actions">
+      <button className="button outline" disabled={working} onClick={onCheck}><RefreshCw className={status?.isChecking ? 'spin' : ''} size={15} /> {status?.isChecking ? 'Checking…' : 'Check'}</button>
+      {status?.updateAvailable && <button className="button primary" disabled={working || !status.canUpdate} onClick={onUpdate}><Download size={15} /> Update DCS</button>}
+    </div>
+    {status?.updateAvailable && !status.canUpdate && <small className="update-requirement">Select DCS.exe in Settings so Groundcrew can find its updater.</small>}
+  </section>
+}
+
 export default function App() {
   const [page, setPage] = useState<Page>('overview')
   const [data, setData] = useState<DashboardSnapshot>(mockSnapshot)
   const [settings, setSettings] = useState<DashboardSettings>(mockSettings)
   const [navExpanded, setNavExpanded] = useState(false)
-  const [pending, setPending] = useState<{ kind: 'start' | 'stop' | 'restart' | 'mission'; value?: string } | null>(null)
+  const [pending, setPending] = useState<{ kind: 'start' | 'stop' | 'restart' | 'mission' | 'update'; value?: string } | null>(null)
   const [busy, setBusy] = useState(false)
+  const [dcsUpdate, setDcsUpdate] = useState<DcsUpdateStatus | null>(null)
 
   const refreshSnapshot = async () => setData(await getSnapshot())
   useEffect(() => {
     void refreshSnapshot()
     void getSettings().then(value => value && setSettings(value))
+    void getDcsUpdateStatus().then(setDcsUpdate).catch(() => setDcsUpdate(mockDcsUpdateStatus))
     const unsubscribe = subscribeToSnapshots(setData)
     const polling = window.setInterval(() => { void refreshSnapshot() }, 5000)
-    return () => { unsubscribe(); window.clearInterval(polling) }
+    const updatePolling = window.setInterval(() => { void getDcsUpdateStatus().then(setDcsUpdate).catch(() => undefined) }, 30000)
+    return () => { unsubscribe(); window.clearInterval(polling); window.clearInterval(updatePolling) }
   }, [])
+  useEffect(() => {
+    if (!dcsUpdate?.isUpdating) return
+    const polling = window.setInterval(() => { void getDcsUpdateStatus().then(setDcsUpdate).catch(() => undefined) }, 2000)
+    return () => window.clearInterval(polling)
+  }, [dcsUpdate?.isUpdating])
   const persistSettings = async (next: DashboardSettings) => {
     const ok = data.demoMode || await saveSettings(next)
     if (ok) setSettings(next)
@@ -555,9 +580,35 @@ export default function App() {
   const title = useMemo(() => nav.find(item => item.id === page)?.label ?? 'Overview', [page])
   const srs = data.integrations.find(item => item.id === 'srs')
   const olympus = data.integrations.find(item => item.id === 'olympus')
+  const checkForDcsUpdate = async () => {
+    if (data.demoMode) {
+      setDcsUpdate(current => ({ ...(current ?? mockDcsUpdateStatus), isChecking: true, error: null }))
+      window.setTimeout(() => setDcsUpdate(mockDcsUpdateStatus), 650)
+      return
+    }
+    setDcsUpdate(current => current ? { ...current, isChecking: true, error: null } : current)
+    const result = await checkDcsUpdate()
+    if (result.status) setDcsUpdate(result.status)
+    else setDcsUpdate(current => current ? { ...current, isChecking: false, error: result.error ?? 'Update check failed.' } : current)
+  }
   const act = async () => {
     if (!pending) return
     setBusy(true)
+    if (pending.kind === 'update') {
+      if (data.demoMode) {
+        setDcsUpdate(current => ({ ...(current ?? mockDcsUpdateStatus), isUpdating: true, message: 'DCS_updater is downloading and installing the update…', error: null }))
+        window.setTimeout(() => {
+          setDcsUpdate(current => current ? { ...current, installedVersion: current.latestVersion, updateAvailable: false, isUpdating: false, message: `DCS ${current.latestVersion} is installed and the server was restarted.` } : current)
+          setData(current => ({ ...current, server: { ...current.server, version: mockDcsUpdateStatus.latestVersion ?? current.server.version } }))
+        }, 1800)
+      } else {
+        const result = await applyDcsUpdate()
+        if (result.status) setDcsUpdate(result.status)
+        else setDcsUpdate(current => current ? { ...current, isUpdating: false, error: result.error ?? 'The update could not be started.' } : current)
+      }
+      setBusy(false); setPending(null)
+      return
+    }
     const action = pending.kind === 'mission' ? 'restart' : pending.kind
     const missionResult = pending.kind === 'mission' && pending.value && !data.demoMode ? await switchMission(pending.value) : null
     if (pending.kind !== 'mission' || data.demoMode) await serverAction(action)
@@ -594,6 +645,7 @@ export default function App() {
         <div className="wordmark"><span>GROUNDCREW</span><small>DCS SERVER OPERATIONS</small></div>
         <div className="server-state"><span className="eyebrow">INSTANCE STATUS</span><div><StateDot state={data.server.state} /><strong>{data.server.state.toUpperCase()}</strong></div><p>{data.server.name}</p></div>
         <dl className="facts"><div><dt>Version</dt><dd>{data.server.version}</dd></div><div><dt>Mission</dt><dd>{data.server.mission}</dd></div><div><dt>Uptime</dt><dd>{duration(data.server.uptimeSeconds)}</dd></div><div><dt>Server FPS</dt><dd>{data.server.fps}</dd></div></dl>
+        <DcsUpdaterCard status={dcsUpdate} onCheck={() => void checkForDcsUpdate()} onUpdate={() => setPending({ kind: 'update' })} />
         <div className="control-actions">
           {data.server.state === 'stopped' ? <button className="button primary wide" onClick={() => setPending({ kind: 'start' })}><Play size={17} fill="currentColor" /> Start server</button> : <><button className="button outline wide" onClick={() => setPending({ kind: 'restart' })}><RefreshCw size={17} /> Restart server</button><button className="button outline wide muted" onClick={() => setPending({ kind: 'stop' })}><Square size={15} fill="currentColor" /> Stop server</button></>}
         </div>
@@ -601,7 +653,7 @@ export default function App() {
         <button className="power-button" onClick={() => setPending({ kind: data.server.state === 'running' ? 'stop' : 'start' })}><Power size={19} /> {data.server.state === 'running' ? 'SHUT DOWN INSTANCE' : 'START INSTANCE'}</button>
       </aside>
 
-      {pending && <ConfirmDialog title={pending.kind === 'mission' ? 'Load mission and restart?' : `${pending.kind[0].toUpperCase()}${pending.kind.slice(1)} DCS server?`} body={pending.kind === 'mission' ? `${pending.value} will become the active mission. Connected players will be disconnected during the restart.` : `This action controls the DCS dedicated server process on the Windows host.${pending.kind !== 'start' ? ' Connected players may be disconnected.' : ''}`} action={busy ? 'Working…' : pending.kind === 'mission' ? 'Load & restart' : `${pending.kind} server`} danger={pending.kind === 'stop'} onConfirm={act} onClose={() => !busy && setPending(null)} />}
+      {pending && <ConfirmDialog title={pending.kind === 'update' ? `Update DCS to ${dcsUpdate?.latestVersion ?? 'the latest version'}?` : pending.kind === 'mission' ? 'Load mission and restart?' : `${pending.kind[0].toUpperCase()}${pending.kind.slice(1)} DCS server?`} body={pending.kind === 'update' ? 'Groundcrew will stop the dedicated server, run the official DCS updater, and restart the instance if it is currently running. Connected players will be disconnected.' : pending.kind === 'mission' ? `${pending.value} will become the active mission. Connected players will be disconnected during the restart.` : `This action controls the DCS dedicated server process on the Windows host.${pending.kind !== 'start' ? ' Connected players may be disconnected.' : ''}`} action={busy ? 'Working…' : pending.kind === 'update' ? 'Update DCS' : pending.kind === 'mission' ? 'Load & restart' : `${pending.kind} server`} danger={pending.kind === 'stop'} onConfirm={act} onClose={() => !busy && setPending(null)} />}
     </div>
   )
 }

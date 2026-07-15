@@ -25,9 +25,16 @@ builder.Services.AddHttpClient("github-releases", client =>
     client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
     client.Timeout = TimeSpan.FromMinutes(3);
 });
+builder.Services.AddHttpClient("dcs-updates", client =>
+{
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Groundcrew/0.1 (+https://github.com/nabbl/dcs-groundcrew)");
+    client.Timeout = TimeSpan.FromSeconds(15);
+});
 builder.Services.AddSingleton<SettingsStore>();
 builder.Services.AddSingleton<ModerationAuditStore>();
 builder.Services.AddSingleton<DcsProcessService>();
+builder.Services.AddSingleton<DcsUpdateService>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<DcsUpdateService>());
 builder.Services.AddSingleton<HostMetricsService>();
 builder.Services.AddSingleton<IntegrationService>();
 builder.Services.AddSingleton<GrpcInstallerService>();
@@ -59,6 +66,13 @@ app.MapPut("/api/server-config", async (DcsServerConfigurationUpdate update, Dcs
 app.MapPost("/api/server/start", (DcsProcessService service) => RunControl(service.StartAsync));
 app.MapPost("/api/server/stop", (DcsProcessService service) => RunControl(service.StopAsync));
 app.MapPost("/api/server/restart", (DcsProcessService service) => RunControl(service.RestartAsync));
+app.MapGet("/api/dcs-update/status", async (DcsUpdateService service) => Results.Ok(await service.GetStatusAsync()));
+app.MapPost("/api/dcs-update/check", async (DcsUpdateService service, CancellationToken cancellationToken) => Results.Ok(await service.CheckAsync(cancellationToken)));
+app.MapPost("/api/dcs-update/apply", async (DcsUpdateService service) =>
+{
+    try { return Results.Accepted(value: await service.BeginUpdateAsync()); }
+    catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
+});
 
 app.MapGet("/api/missions", async (SettingsStore store) =>
 {
