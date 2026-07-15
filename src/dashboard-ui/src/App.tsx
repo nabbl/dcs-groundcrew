@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Activity, Ban, ChevronRight, CircleGauge, Clock3, Coffee, Cpu, ExternalLink,
-  Download, FileArchive, FolderCog, Gauge, HardDrive, Headphones, Home, LayoutDashboard,
-  MemoryStick, MessageSquareText, MoreHorizontal, Network, PanelLeftClose, PanelLeftOpen,
-  Play, PlugZap, Power, Radio, RefreshCw, RotateCcw, Send, Server, Settings,
+  Activity, Ban, ChevronRight, CircleGauge, ClipboardList, Clock3, Coffee, Cpu, ExternalLink,
+  Download, Eye, FileArchive, FolderCog, Gauge, HardDrive, Headphones, Home, LayoutDashboard,
+  Map, MemoryStick, MessageSquareText, MoreHorizontal, Network, PanelLeftClose, PanelLeftOpen,
+  Plane, Play, PlugZap, Power, Radio, RefreshCw, RotateCcw, Send, Server, Settings,
   ShieldAlert, Square, Users, X, Info,
 } from 'lucide-react'
 import { applyDcsUpdate, browseServer, checkDcsUpdate, getDcsUpdateStatus, getGrpcInstallerLog, getGrpcStatus, getMissionLibrary, getServerConfiguration, getSettings, getSnapshot, inspectMission, installGrpc, integrationAction, moderatePlayer, saveServerConfiguration, saveSettings, sendChatMessage, serverAction, subscribeToSnapshots, switchMission } from './api'
@@ -23,6 +23,20 @@ const nav: { id: Page; label: string; icon: typeof Home }[] = [
 ]
 
 type IntegrationConfig = DashboardSettings['integrations'][number]
+
+const integrationIcons: Record<string, typeof Radio> = {
+  srs: Headphones,
+  olympus: Map,
+  tacview: Plane,
+  skyeye: Eye,
+  dks: ClipboardList,
+  grpc: Network,
+}
+
+function IntegrationIcon({ id, size = 19 }: { id: string; size?: number }) {
+  const Icon = integrationIcons[id] ?? PlugZap
+  return <Icon size={size} aria-hidden="true" />
+}
 
 function duration(seconds: number) {
   const h = Math.floor(seconds / 3600)
@@ -79,7 +93,7 @@ function IntegrationRow({ item, config, grpcStatus, expanded, busy, error, onExp
   return (
     <article className={`integration-row ${expanded ? 'expanded' : ''}`}>
       <button className="integration-summary" onClick={onExpand}>
-        <span className="integration-mark"><Radio size={19} /></span>
+        <span className="integration-mark"><IntegrationIcon id={item.id} /></span>
         <span className="integration-copy"><strong>{item.name}</strong><small>{item.description}</small></span>
         <span className={`status-label ${running || webOnly && installed ? 'good' : installed ? 'idle' : 'missing'}`}>
           <StateDot state={running || webOnly && installed} />{status}
