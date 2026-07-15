@@ -87,9 +87,9 @@ function IntegrationRow({ item, config, grpcStatus, expanded, busy, error, onExp
   const remoteSkyEye = item.id === 'skyeye' && config?.remote
   const remoteHost = config?.remoteHost || hostFromUrl(config?.url)
   const installed = remoteSkyEye ? Boolean(remoteHost) : managedGrpc && grpcStatus ? grpcStatus.installed : item.installed
-  const running = item.running
+  const running = managedGrpc ? Boolean(grpcStatus?.running || item.running) : item.running
   const endpoint = remoteSkyEye ? remoteHost : item.url ?? (config?.port ? `${config.host || '127.0.0.1'}:${config.port}` : undefined)
-  const status = remoteSkyEye ? running ? 'Remote host reachable' : installed ? 'No ping response' : 'Not configured' : webOnly ? (installed ? 'Web app' : 'Not configured') : running ? 'Running' : installed ? 'Installed' : managedGrpc ? 'Not installed' : 'Not configured'
+  const status = managedGrpc ? running ? 'Connected' : installed ? 'Installed · offline' : 'Not installed' : remoteSkyEye ? running ? 'Remote host reachable' : installed ? 'No ping response' : 'Not configured' : webOnly ? (installed ? 'Web app' : 'Not configured') : running ? 'Running' : installed ? 'Installed' : 'Not configured'
   return (
     <article className={`integration-row ${expanded ? 'expanded' : ''}`}>
       <button className="integration-summary" onClick={onExpand}>
