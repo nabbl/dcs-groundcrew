@@ -19,6 +19,9 @@ public sealed class GrpcInstallerService
     private readonly SettingsStore _settings;
     private readonly DcsProcessService _dcs;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ILogger<GrpcInstallerService> _logger;
+    private readonly string _logPath;
+    private readonly object _logGate = new();
     private readonly SemaphoreSlim _installGate = new(1, 1);
     private readonly SemaphoreSlim _releaseGate = new(1, 1);
     private LatestRelease? _cachedRelease;
@@ -34,11 +37,31 @@ public sealed class GrpcInstallerService
         new("Tools/DCS-gRPC", true),
     };
 
-    public GrpcInstallerService(SettingsStore settings, DcsProcessService dcs, IHttpClientFactory httpClientFactory)
+    public GrpcInstallerService(SettingsStore settings, DcsProcessService dcs, IHttpClientFactory httpClientFactory, IWebHostEnvironment environment, ILogger<GrpcInstallerService> logger)
     {
         _settings = settings;
         _dcs = dcs;
         _httpClientFactory = httpClientFactory;
+        _logger = logger;
+        var dataDirectory = OperatingSystem.IsWindows()
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Groundcrew")
+            : Path.Combine(environment.ContentRootPath, "data");
+        _logPath = Path.Combine(dataDirectory, "Logs", "dcs-grpc-installer.log");
+        try { Directory.CreateDirectory(Path.GetDirectoryName(_logPath)!); }
+        catch (Exception exception) { _logger.LogWarning(exception, "Groundcrew could not create the DCS-gRPC installer log directory at {LogPath}.", _logPath); }
+    }
+
+    public GrpcInstallerLog GetLog()
+    {
+        lock (_logGate)
+        {
+            try
+            {
+                if (!File.Exists(_logPath)) return new(_logPath, Array.Empty<string>());
+                return new(_logPath, File.ReadLines(_logPath).TakeLast(250).ToList());
+            }
+            catch (Exception exception) { return new(_logPath, new[] { $"Groundcrew could not read the installer log: {ShortMessage(exception)}" }); }
+        }
     }
 
     public async Task<GrpcInstallationStatus> GetStatusAsync(bool includeLatest = true)
@@ -89,18 +112,25 @@ public sealed class GrpcInstallerService
 
     public async Task<GrpcInstallationResult> InstallLatestAsync()
     {
+        var installationId = Guid.NewGuid().ToString("N")[..8];
+        LogInformation(installationId, "Install requested.");
         await _installGate.WaitAsync();
         try
         {
             var settings = await _settings.GetAsync();
             var savedGamesPath = RequireSavedGamesPath(settings.SavedGamesPath);
+            var missionScriptingCandidates = GetMissionScriptingCandidates(settings.DcsExecutablePath);
+            foreach (var candidate in missionScriptingCandidates) LogInformation(installationId, $"DCS loader candidate: {candidate}");
             var missionScriptingPath = ResolveMissionScriptingPath(settings.DcsExecutablePath)
                 ?? throw new InvalidOperationException("Choose a valid DCS server executable in Settings before installing DCS-gRPC.");
+            LogInformation(installationId, $"Saved Games destination: {savedGamesPath}");
+            LogInformation(installationId, $"DCS loader file: {missionScriptingPath}");
             if (!File.Exists(missionScriptingPath)) throw new InvalidOperationException($"MissionScripting.lua was not found at '{missionScriptingPath}'.");
             var integration = settings.Integrations.First(item => string.Equals(item.Id, "grpc", StringComparison.OrdinalIgnoreCase));
             var host = string.IsNullOrWhiteSpace(integration.Host) ? "127.0.0.1" : integration.Host;
             var port = integration.Port is > 0 and <= 65535 ? integration.Port.Value : 50051;
             var release = await GetLatestReleaseAsync(forceRefresh: true);
+            LogInformation(installationId, $"Resolved official release {release.Version}: {release.AssetName} ({release.Size} bytes).");
             var temporaryZip = Path.Combine(Path.GetTempPath(), $"groundcrew-dcs-grpc-{Guid.NewGuid():N}.zip");
             var stagingPath = Path.Combine(savedGamesPath, $".groundcrew-grpc-staging-{Guid.NewGuid():N}");
             var backupPath = Path.Combine(savedGamesPath, "Groundcrew Backups", "DCS-gRPC", DateTime.UtcNow.ToString("yyyyMMdd-HHmmssfff"));
@@ -111,23 +141,36 @@ public sealed class GrpcInstallerService
 
             try
             {
+                LogInformation(installationId, "Downloading release archive from the official DCS-gRPC GitHub repository.");
                 sha256 = await DownloadAsync(release, temporaryZip);
+                LogInformation(installationId, $"Download completed and size verified. SHA-256: {sha256}");
                 ExtractAndValidate(temporaryZip, stagingPath);
+                LogInformation(installationId, "Archive paths and required package files validated.");
                 dcsWasRunning = await _dcs.FindAsync() is not null;
-                if (dcsWasRunning) await _dcs.StopAsync();
-                InstallStagedFiles(stagingPath, savedGamesPath, backupPath, missionScriptingPath, host, port);
+                if (dcsWasRunning)
+                {
+                    LogInformation(installationId, "Stopping the running DCS server before changing loader and DLL files.");
+                    await _dcs.StopAsync();
+                }
+                InstallStagedFiles(stagingPath, savedGamesPath, backupPath, missionScriptingPath, host, port, detail => LogInformation(installationId, detail));
                 installationCommitted = true;
                 integration.ConfigPath = Path.Combine(savedGamesPath, "Config", "dcs-grpc.lua");
                 integration.Host = host;
                 integration.Port = port;
-                try { await _settings.SaveAsync(settings); }
-                catch (Exception exception) { warning = $"DCS-gRPC was installed, but its Groundcrew settings could not be saved: {ShortMessage(exception)}"; }
+                try { await _settings.SaveAsync(settings); LogInformation(installationId, $"Saved gRPC endpoint {host}:{port}."); }
+                catch (Exception exception)
+                {
+                    warning = $"DCS-gRPC was installed, but its Groundcrew settings could not be saved: {ShortMessage(exception)}";
+                    LogError(installationId, "DCS-gRPC files were installed, but Groundcrew endpoint settings could not be saved.", exception);
+                }
             }
-            catch
+            catch (Exception exception)
             {
+                LogError(installationId, "Installation failed; any staged or applied package changes were rolled back.", exception);
                 if (dcsWasRunning)
                 {
-                    try { await _dcs.StartAsync(); } catch { }
+                    try { await _dcs.StartAsync(); LogInformation(installationId, "Restored the previously running DCS server after failure."); }
+                    catch (Exception restartException) { LogError(installationId, "DCS could not be restarted after the failed installation.", restartException); }
                 }
                 throw;
             }
@@ -140,17 +183,24 @@ public sealed class GrpcInstallerService
             var restarted = false;
             if (dcsWasRunning && installationCommitted)
             {
-                try { await _dcs.StartAsync(); restarted = true; }
+                try { await _dcs.StartAsync(); restarted = true; LogInformation(installationId, "Restarted DCS after installation."); }
                 catch (Exception exception)
                 {
                     var restartWarning = $"DCS-gRPC was installed, but DCS could not be restarted: {ShortMessage(exception)}";
                     warning = string.IsNullOrWhiteSpace(warning) ? restartWarning : $"{warning} {restartWarning}";
+                    LogError(installationId, "DCS-gRPC was installed, but DCS could not be restarted.", exception);
                 }
             }
             var status = await GetStatusAsync();
             var retainedBackup = Directory.Exists(backupPath) && Directory.EnumerateFileSystemEntries(backupPath).Any() ? backupPath : null;
             if (retainedBackup is null) TryDeleteDirectory(backupPath);
+            LogInformation(installationId, $"DCS-gRPC {release.Version} installation completed.{(retainedBackup is null ? " No previous files required retention." : $" Backup retained at {retainedBackup}.")}");
             return new GrpcInstallationResult(status, release.Version, sha256!, retainedBackup, restarted, warning);
+        }
+        catch (Exception exception)
+        {
+            LogError(installationId, "Install request ended with an error.", exception);
+            throw;
         }
         finally { _installGate.Release(); }
     }
@@ -237,7 +287,7 @@ public sealed class GrpcInstallerService
         }
     }
 
-    private static void InstallStagedFiles(string stagingPath, string savedGamesPath, string backupPath, string missionScriptingPath, string host, int port)
+    private static void InstallStagedFiles(string stagingPath, string savedGamesPath, string backupPath, string missionScriptingPath, string host, int port, Action<string> log)
     {
         Directory.CreateDirectory(backupPath);
         var movedTargets = new List<(string Destination, string? Backup, bool Directory)>();
@@ -248,6 +298,7 @@ public sealed class GrpcInstallerService
         {
             Directory.CreateDirectory(Path.GetDirectoryName(missionBackup)!);
             File.Copy(missionScriptingPath, missionBackup, overwrite: false);
+            log($"Backed up DCS loader to {missionBackup}.");
             if (File.Exists(configPath))
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(configBackup)!);
@@ -269,13 +320,17 @@ public sealed class GrpcInstallerService
                 movedTargets.Add((destination, backup, target.Directory));
                 Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
                 if (target.Directory) Directory.Move(source, destination); else File.Move(source, destination);
+                log($"Installed {target.RelativePath} into Saved Games.");
             }
 
             ConfigureMissionScripting(missionScriptingPath);
+            log($"Configured DCS loader at {missionScriptingPath}.");
             ConfigureAutostart(configPath, host, port);
+            log($"Configured gRPC autostart at {configPath}.");
         }
         catch
         {
+            log("A package or loader step failed; restoring previous files.");
             foreach (var moved in movedTargets.AsEnumerable().Reverse())
             {
                 if (moved.Directory) TryDeleteDirectory(moved.Destination); else TryDeleteFile(moved.Destination);
@@ -297,9 +352,15 @@ public sealed class GrpcInstallerService
         if (content.Contains(@"Scripts\DCS-gRPC\grpc-mission.lua", StringComparison.OrdinalIgnoreCase)
             || content.Contains("Scripts/DCS-gRPC/grpc-mission.lua", StringComparison.OrdinalIgnoreCase)) return;
         var newline = content.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
-        var anchor = new Regex("(?m)^(?<indent>[ \\t]*)dofile\\s*\\(\\s*['\"]Scripts[/\\\\]ScriptingSystem\\.lua['\"]\\s*\\)[ \\t]*$", RegexOptions.CultureInvariant);
-        if (!anchor.IsMatch(content)) throw new InvalidDataException("Groundcrew could not find the ScriptingSystem.lua loader in MissionScripting.lua, so it made no unsafe guess.");
-        content = anchor.Replace(content, match => $"{match.Value}{newline}{match.Groups["indent"].Value}{LoaderLine}", 1);
+        var anchor = new Regex("(?m)^(?<indent>[ \\t]*)dofile\\s*\\(\\s*(?<quote>['\"])Scripts[/\\\\]ScriptingSystem\\.lua\\k<quote>\\s*\\)[ \\t]*(?:--[^\\r\\n]*)?$", RegexOptions.CultureInvariant);
+        if (anchor.IsMatch(content))
+            content = anchor.Replace(content, match => $"{match.Value}{newline}{match.Groups["indent"].Value}{LoaderLine}", 1);
+        else
+        {
+            var sanitization = new Regex("(?m)^(?<indent>[ \\t]*)local\\s+function\\s+sanitizeModule\\s*\\(", RegexOptions.CultureInvariant);
+            if (!sanitization.IsMatch(content)) throw new InvalidDataException("Groundcrew could not find a safe pre-sanitization loader position in MissionScripting.lua. No installation files were retained.");
+            content = sanitization.Replace(content, match => $"{match.Groups["indent"].Value}{LoaderLine}{newline}{match.Value}", 1);
+        }
         WriteAtomic(path, content);
     }
 
@@ -381,10 +442,24 @@ public sealed class GrpcInstallerService
 
     private static string? ResolveMissionScriptingPath(string executablePath)
     {
-        if (string.IsNullOrWhiteSpace(executablePath) || !Path.IsPathFullyQualified(executablePath) || !File.Exists(executablePath)) return null;
-        var executableDirectory = Directory.GetParent(executablePath);
-        var root = executableDirectory?.Name.StartsWith("bin", StringComparison.OrdinalIgnoreCase) == true ? executableDirectory.Parent?.FullName : executableDirectory?.FullName;
-        return root is null ? null : Path.Combine(root, "Scripts", "MissionScripting.lua");
+        var candidates = GetMissionScriptingCandidates(executablePath);
+        if (candidates.Count == 0) return null;
+        var existing = candidates.FirstOrDefault(File.Exists);
+        if (existing is not null) return existing;
+        var executableDirectory = new FileInfo(executablePath).Directory!;
+        var installRoot = executableDirectory.Name.StartsWith("bin", StringComparison.OrdinalIgnoreCase) ? executableDirectory.Parent : executableDirectory;
+        return installRoot is null ? null : Path.Combine(installRoot.FullName, "Scripts", "MissionScripting.lua");
+    }
+
+    private static IReadOnlyList<string> GetMissionScriptingCandidates(string executablePath)
+    {
+        if (string.IsNullOrWhiteSpace(executablePath) || !Path.IsPathFullyQualified(executablePath) || !File.Exists(executablePath)) return Array.Empty<string>();
+        var executableDirectory = new FileInfo(executablePath).Directory;
+        if (executableDirectory is null) return Array.Empty<string>();
+        var candidates = new List<string>();
+        for (var directory = executableDirectory; directory is not null && candidates.Count < 4; directory = directory.Parent)
+            candidates.Add(Path.Combine(directory.FullName, "Scripts", "MissionScripting.lua"));
+        return candidates;
     }
 
     private static bool IsNewer(string? latest, string? installed)
@@ -414,6 +489,34 @@ public sealed class GrpcInstallerService
     {
         var message = exception.Message.Replace('\r', ' ').Replace('\n', ' ').Trim();
         return message.Length <= 220 ? message : $"{message[..217]}...";
+    }
+    private void LogInformation(string installationId, string message)
+    {
+        _logger.LogInformation("DCS-gRPC installer [{InstallationId}]: {Message}", installationId, message);
+        AppendLog("INFO", installationId, message);
+    }
+    private void LogError(string installationId, string message, Exception exception)
+    {
+        _logger.LogError(exception, "DCS-gRPC installer [{InstallationId}]: {Message}", installationId, message);
+        AppendLog("ERROR", installationId, $"{message} {exception.GetType().Name}: {ShortMessage(exception)}");
+    }
+    private void AppendLog(string level, string installationId, string message)
+    {
+        lock (_logGate)
+        {
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(_logPath)!);
+                if (File.Exists(_logPath) && new FileInfo(_logPath).Length > 2 * 1024 * 1024)
+                {
+                    var previous = $"{_logPath}.1";
+                    if (File.Exists(previous)) File.Delete(previous);
+                    File.Move(_logPath, previous);
+                }
+                File.AppendAllText(_logPath, $"{DateTimeOffset.Now:O} [{level}] [{installationId}] {message}{Environment.NewLine}", new UTF8Encoding(false));
+            }
+            catch { }
+        }
     }
     private static void TryDeleteFile(string path) { try { if (File.Exists(path)) File.Delete(path); } catch { } }
     private static void TryDeleteDirectory(string path) { try { if (Directory.Exists(path)) Directory.Delete(path, recursive: true); } catch { } }

@@ -1,4 +1,4 @@
-import type { DashboardSettings, DashboardSnapshot, DcsServerConfiguration, DcsServerConfigurationSaveResult, DcsServerConfigurationUpdate, DcsUpdateStatus, FileBrowserResult, FileSystemEntry, GrpcInstallationResult, GrpcInstallationStatus, MissionLibraryResult, MissionReadinessReport, ModerationAction, ModerationAuditEntry } from './types'
+import type { DashboardSettings, DashboardSnapshot, DcsServerConfiguration, DcsServerConfigurationSaveResult, DcsServerConfigurationUpdate, DcsUpdateStatus, FileBrowserResult, FileSystemEntry, GrpcInstallationResult, GrpcInstallationStatus, GrpcInstallerLog, MissionLibraryResult, MissionReadinessReport, ModerationAction, ModerationAuditEntry } from './types'
 import { mockSnapshot } from './mockData'
 import { HubConnectionBuilder, HttpTransportType } from '@microsoft/signalr'
 
@@ -158,6 +158,12 @@ export async function getGrpcStatus(): Promise<GrpcInstallationStatus> {
   const response = await fetch('/api/grpc/status')
   if (!response.ok) throw new Error('Groundcrew could not inspect the DCS-gRPC installation.')
   return await response.json() as GrpcInstallationStatus
+}
+
+export async function getGrpcInstallerLog(): Promise<GrpcInstallerLog> {
+  const response = await fetch('/api/grpc/install-log')
+  if (!response.ok) throw new Error('Groundcrew could not read the DCS-gRPC installer log.')
+  return await response.json() as GrpcInstallerLog
 }
 
 export async function installGrpc(): Promise<{ ok: boolean; result?: GrpcInstallationResult; error?: string }> {

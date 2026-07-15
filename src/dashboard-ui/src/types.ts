@@ -68,6 +68,11 @@ export interface GrpcInstallationResult {
   warning: string | null
 }
 
+export interface GrpcInstallerLog {
+  path: string
+  lines: string[]
+}
+
 export interface DcsUpdateStatus {
   installedVersion: string | null
   latestVersion: string | null

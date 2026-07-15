@@ -6,9 +6,9 @@ import {
   Play, PlugZap, Power, Radio, RefreshCw, RotateCcw, Send, Server, Settings,
   ShieldAlert, Square, Users, X, Info,
 } from 'lucide-react'
-import { applyDcsUpdate, browseServer, checkDcsUpdate, getDcsUpdateStatus, getGrpcStatus, getMissionLibrary, getServerConfiguration, getSettings, getSnapshot, inspectMission, installGrpc, integrationAction, moderatePlayer, saveServerConfiguration, saveSettings, sendChatMessage, serverAction, subscribeToSnapshots, switchMission } from './api'
+import { applyDcsUpdate, browseServer, checkDcsUpdate, getDcsUpdateStatus, getGrpcInstallerLog, getGrpcStatus, getMissionLibrary, getServerConfiguration, getSettings, getSnapshot, inspectMission, installGrpc, integrationAction, moderatePlayer, saveServerConfiguration, saveSettings, sendChatMessage, serverAction, subscribeToSnapshots, switchMission } from './api'
 import { mockDcsUpdateStatus, mockGrpcStatus, mockMissionLibrary, mockMissionReadiness, mockServerConfiguration, mockSettings, mockSnapshot } from './mockData'
-import type { DashboardSettings, DashboardSnapshot, DcsServerConfiguration, DcsServerConfigurationUpdate, DcsUpdateStatus, FileBrowserResult, GrpcInstallationResult, GrpcInstallationStatus, Integration, MissionFile, MissionLibraryResult, MissionReadinessReport, ModerationAction, Player, ServerState } from './types'
+import type { DashboardSettings, DashboardSnapshot, DcsServerConfiguration, DcsServerConfigurationUpdate, DcsUpdateStatus, FileBrowserResult, GrpcInstallationResult, GrpcInstallationStatus, GrpcInstallerLog, Integration, MissionFile, MissionLibraryResult, MissionReadinessReport, ModerationAction, Player, ServerState } from './types'
 
 type Page = 'overview' | 'missions' | 'serverConfig' | 'players' | 'integrations' | 'chat' | 'settings'
 
@@ -379,6 +379,12 @@ function GrpcInstallDialog({ status, settings, demoMode, onSaveSettings, onStatu
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<GrpcInstallationResult | null>(null)
+  const [installLog, setInstallLog] = useState<GrpcInstallerLog | null>(null)
+  const refreshLog = async () => {
+    if (demoMode) { setInstallLog({ path: 'C:\\ProgramData\\Groundcrew\\Logs\\dcs-grpc-installer.log', lines: ['Preview mode: no installation has been run on this host.'] }); return }
+    try { setInstallLog(await getGrpcInstallerLog()) } catch { }
+  }
+  useEffect(() => { void refreshLog() }, [])
   const install = async () => {
     if (!host.trim() || port < 1 || port > 65535) { setError('Enter a valid host and TCP port.'); return }
     setBusy(true); setError(''); setResult(null)
@@ -392,6 +398,7 @@ function GrpcInstallDialog({ status, settings, demoMode, onSaveSettings, onStatu
     const response = await installGrpc()
     if (!response.ok || !response.result) setError(response.error ?? 'DCS-gRPC could not be installed.')
     else { setResult(response.result); onStatus(response.result.status); await onRefresh() }
+    await refreshLog()
     setBusy(false)
   }
   const action = status.updateAvailable ? 'Update DCS-gRPC' : status.installed ? 'Repair installation' : 'Install DCS-gRPC'
@@ -399,13 +406,14 @@ function GrpcInstallDialog({ status, settings, demoMode, onSaveSettings, onStatu
     <header><div><span className="eyebrow">MANAGED INTEGRATION</span><h2>DCS-gRPC</h2><p>Official release {status.latestVersion ? `v${status.latestVersion}` : 'from GitHub'} · live mission data and server control</p></div><button className="icon-button" disabled={busy} onClick={onClose} aria-label="Close installer"><X size={19} /></button></header>
     <div className="grpc-install-body">
       <div className="grpc-install-summary"><span className="integration-mark"><Download size={20} /></span><div><strong>{status.installed ? `Version ${status.installedVersion ?? 'unknown'} installed` : 'Ready to install'}</strong><p>Groundcrew downloads the latest ZIP from the official DCS-gRPC GitHub release, validates its size and contents, then installs only the expected files.</p></div></div>
-      <div className="grpc-paths"><label><span>Saved Games destination</span><strong>{status.savedGamesPath || 'Not configured'}</strong></label><label><span>DCS loader file</span><strong>{status.missionScriptingPath || 'Not found'}</strong></label></div>
+      <div className="grpc-paths"><label><span>gRPC package · Saved Games</span><strong>{status.savedGamesPath || 'Not configured'}</strong></label><label><span>MissionScripting.lua · DCS installation</span><strong>{status.missionScriptingPath || 'Not found'}</strong></label></div>
       <div className="config-pair"><label><span>Listen host</span><input value={host} onChange={event => setHost(event.target.value)} placeholder="127.0.0.1" /></label><label><span>gRPC port</span><input type="number" min="1" max="65535" value={port} onChange={event => setPort(Number(event.target.value))} /></label></div>
       <div className="grpc-install-steps"><div><strong>1</strong><span><b>Download & validate</b><small>Official release URL, exact asset name, size limits, safe ZIP paths, and required files.</small></span></div><div><strong>2</strong><span><b>Back up & install</b><small>Existing DCS-gRPC files and Lua configuration are retained in Groundcrew Backups.</small></span></div><div><strong>3</strong><span><b>Wire into DCS</b><small>MissionScripting.lua is patched safely and autostart is enabled. A running server is restarted.</small></span></div></div>
       <div className="config-note">DCS-gRPC does not publish a checksum or code signature with its release. Groundcrew computes the downloaded SHA-256 for the installation record, but GitHub HTTPS remains the source of trust.</div>
       {status.requirementError && <div className="integration-error"><ShieldAlert size={14} />{status.requirementError}</div>}
       {error && <div className="integration-error"><ShieldAlert size={14} />{error}</div>}
       {result && <div className="grpc-install-result"><Activity size={17} /><div><strong>DCS-gRPC {result.version} installed</strong><span>{result.sha256 === 'preview' ? 'Preview completed.' : `SHA-256 ${result.sha256}`}{result.backupPath ? ` · Backup: ${result.backupPath}` : ''}</span>{result.warning && <small>{result.warning}</small>}</div></div>}
+      <details className="grpc-installer-log" open={Boolean(error)}><summary>Installation log <span>{installLog?.lines.length ?? 0} recent entries</span></summary><div className="grpc-log-toolbar"><code>{installLog?.path ?? 'Loading log location…'}</code><button className="text-button" onClick={() => void refreshLog()}><RefreshCw size={13} /> Refresh</button></div><pre>{installLog?.lines.length ? installLog.lines.join('\n') : 'No DCS-gRPC installation has been attempted yet.'}</pre></details>
     </div>
     <footer><button className="button ghost" disabled={busy} onClick={onClose}>{result ? 'Close' : 'Cancel'}</button>{!result && <button className="button primary" disabled={busy || !status.canInstall} onClick={() => void install()}>{busy ? <><RefreshCw className="spin" size={15} /> Installing…</> : <><Download size={15} /> {action}</>}</button>}</footer>
   </div></div>

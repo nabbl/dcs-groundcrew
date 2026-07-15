@@ -267,6 +267,13 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .grpc-install-result strong { font-size: 10px; text-transform: uppercase; }
 .grpc-install-result span { overflow-wrap: anywhere; color: #aeb4b1; font: 8px ui-monospace, monospace; }
 .grpc-install-result small { color: #e1b876; font-size: 9px; }
+.grpc-installer-log { border: 1px solid #303436; background: #101214; }
+.grpc-installer-log summary { min-height: 39px; padding: 0 12px; display: flex; align-items: center; justify-content: space-between; color: #aeb3b5; font-size: 9px; font-weight: 700; text-transform: uppercase; cursor: pointer; }
+.grpc-installer-log summary span { color: #6f7578; font-size: 7px; font-weight: 500; }
+.grpc-log-toolbar { min-height: 35px; padding: 0 11px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid #2b2f31; border-bottom: 1px solid #2b2f31; }
+.grpc-log-toolbar code { min-width: 0; overflow: hidden; color: #7d8386; font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
+.grpc-log-toolbar .text-button { flex: 0 0 auto; font-size: 8px; }
+.grpc-installer-log pre { max-height: 190px; margin: 0; padding: 12px; overflow: auto; color: #aeb4b6; background: #0b0d0e; font: 8px/1.55 ui-monospace, "Cascadia Code", monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .moderation-dialog { width: min(680px, 96vw); }
 .moderation-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
 .moderation-actions button { min-height: 112px; padding: 14px; display: flex; flex-direction: column; align-items: flex-start; gap: 7px; color: #9ba0a3; text-align: left; background: #121416; border: 1px solid #353a3c; cursor: pointer; }

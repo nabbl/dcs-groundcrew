@@ -182,6 +182,7 @@ public sealed record GrpcInstallationResult(
     string? BackupPath,
     bool DcsRestarted,
     string? Warning);
+public sealed record GrpcInstallerLog(string Path, IReadOnlyList<string> Lines);
 public sealed record DcsUpdateStatus(
     string? InstalledVersion,
     string? LatestVersion,

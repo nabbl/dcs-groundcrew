@@ -136,6 +136,7 @@ app.MapPost("/api/missions/switch", async (MissionSwitchRequest request, Setting
 
 app.MapGet("/api/integrations", async (IntegrationService service) => Results.Ok(await service.GetStatusesAsync()));
 app.MapGet("/api/grpc/status", async (GrpcInstallerService service) => Results.Ok(await service.GetStatusAsync()));
+app.MapGet("/api/grpc/install-log", (GrpcInstallerService service) => Results.Ok(service.GetLog()));
 app.MapGet("/api/grpc/live", (DcsGrpcLiveService service) => Results.Ok(service.GetSnapshot()));
 app.MapPost("/api/grpc/install", async (GrpcInstallerService service) =>
 {
