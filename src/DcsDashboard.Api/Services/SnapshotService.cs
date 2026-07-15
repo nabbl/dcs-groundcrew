@@ -22,22 +22,20 @@ public sealed class SnapshotService
         var settings = await _settings.GetAsync();
         var live = _grpc.GetSnapshot();
         var process = await _dcs.FindAsync();
-        var running = process is not null || live.Connected;
+        var running = process is not null;
         var version = "Not installed";
         if (!string.IsNullOrWhiteSpace(settings.DcsExecutablePath) && File.Exists(settings.DcsExecutablePath))
         {
             try { version = System.Diagnostics.FileVersionInfo.GetVersionInfo(settings.DcsExecutablePath).FileVersion ?? "Unknown"; } catch { version = "Unknown"; }
         }
         var configuredMission = string.IsNullOrWhiteSpace(settings.ActiveMissionPath) ? "No mission selected" : Path.GetFileNameWithoutExtension(settings.ActiveMissionPath);
-        var mission = live.Connected && !string.IsNullOrWhiteSpace(live.MissionName) ? live.MissionName : configuredMission;
-        var uptime = process is not null
-            ? Math.Max(0, (long)(DateTimeOffset.Now - process.StartTime).TotalSeconds)
-            : live.Connected ? Math.Max(0, (long)(live.MissionTime ?? 0)) : 0;
+        var mission = running && live.Connected && !string.IsNullOrWhiteSpace(live.MissionName) ? live.MissionName : configuredMission;
+        var uptime = process is not null ? Math.Max(0, (long)(DateTimeOffset.Now - process.StartTime).TotalSeconds) : 0;
         var serverConfiguration = await _serverConfiguration.GetAsync();
         var serverName = serverConfiguration.Exists ? serverConfiguration.Name : settings.ServerName;
         var maxPlayers = serverConfiguration.Exists ? serverConfiguration.MaxPlayers : settings.MaxPlayers;
-        var players = live.Connected ? live.Players : Array.Empty<Player>();
-        var server = new ServerStatus(running ? "running" : "stopped", serverName, version, mission, "Unknown", uptime, live.Connected ? live.Fps ?? 0 : 0, live.Connected && live.Paused == true, players.Count, maxPlayers);
+        var players = running && live.Connected ? live.Players : Array.Empty<Player>();
+        var server = new ServerStatus(running ? "running" : "stopped", serverName, version, mission, "Unknown", uptime, running && live.Connected ? live.Fps ?? 0 : 0, running && live.Connected && live.Paused == true, players.Count, maxPlayers);
         return new DashboardSnapshot(false, server, _metrics.Read(process, settings.MissionLibraryPath), players, await _integrations.GetStatusesAsync(), live.Chat);
     }
 }

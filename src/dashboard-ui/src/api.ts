@@ -1,4 +1,4 @@
-import type { DashboardSettings, DashboardSnapshot, DcsServerConfiguration, DcsServerConfigurationSaveResult, DcsServerConfigurationUpdate, FileBrowserResult, FileSystemEntry, GrpcInstallationResult, GrpcInstallationStatus, MissionLibraryResult, MissionReadinessReport } from './types'
+import type { DashboardSettings, DashboardSnapshot, DcsServerConfiguration, DcsServerConfigurationSaveResult, DcsServerConfigurationUpdate, FileBrowserResult, FileSystemEntry, GrpcInstallationResult, GrpcInstallationStatus, MissionLibraryResult, MissionReadinessReport, ModerationAction, ModerationAuditEntry } from './types'
 import { mockSnapshot } from './mockData'
 import { HubConnectionBuilder, HttpTransportType } from '@microsoft/signalr'
 
@@ -44,6 +44,21 @@ export async function sendChatMessage(message: string): Promise<{ ok: boolean; e
     return { ok: false, error: problem?.detail ?? 'The server did not accept the message.' }
   } catch {
     return { ok: false, error: 'The dashboard backend is not reachable.' }
+  }
+}
+
+export async function moderatePlayer(playerId: string, playerName: string, action: ModerationAction, reason: string, durationSeconds?: number): Promise<{ ok: boolean; entry?: ModerationAuditEntry; error?: string }> {
+  try {
+    const response = await fetch(`/api/players/${encodeURIComponent(playerId)}/${action}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerName, reason, durationSeconds: action === 'ban' ? durationSeconds : null }),
+    })
+    if (response.ok) return { ok: true, entry: await response.json() as ModerationAuditEntry }
+    const problem = await response.json().catch(() => null) as { error?: string; detail?: string } | null
+    return { ok: false, error: problem?.error ?? problem?.detail ?? `Groundcrew could not ${action} this player.` }
+  } catch {
+    return { ok: false, error: 'The Groundcrew backend is not reachable.' }
   }
 }
 

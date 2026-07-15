@@ -9,6 +9,7 @@ service HookService {
   rpc GetPaused(GetPausedRequest) returns (GetPausedResponse) {}
   rpc GetRealTime(GetRealTimeRequest) returns (GetRealTimeResponse) {}
   rpc GetUnitType(GetUnitTypeRequest) returns (GetUnitTypeResponse) {}
+  rpc BanPlayer(BanPlayerRequest) returns (BanPlayerResponse) {}
 }
 
 message GetMissionNameRequest {}
@@ -21,3 +22,9 @@ message GetRealTimeRequest {}
 message GetRealTimeResponse { double time = 1; }
 message GetUnitTypeRequest { string id = 1; }
 message GetUnitTypeResponse { string type = 1; }
+message BanPlayerRequest {
+  uint32 id = 1;
+  uint32 period = 2;
+  string reason = 3;
+}
+message BanPlayerResponse { bool banned = 1; }

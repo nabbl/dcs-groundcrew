@@ -182,4 +182,14 @@ public sealed record GrpcInstallationResult(
     string? Warning);
 public sealed record MissionSwitchRequest(string Path);
 public sealed record ChatSendRequest(string Message);
-public sealed record ModerationRequest(string PlayerId, string? Reason);
+public sealed record ModerationRequest(string? PlayerName, string? Reason, uint? DurationSeconds);
+public sealed record ModerationAuditEntry(
+    string Id,
+    string PlayerId,
+    string PlayerName,
+    string Action,
+    string Reason,
+    uint? DurationSeconds,
+    bool Succeeded,
+    string? Error,
+    DateTimeOffset CreatedAt);

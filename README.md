@@ -21,6 +21,7 @@ Working now:
 - working per-integration configuration for executable/config paths, URLs, and network endpoints
 - managed DCS-gRPC installation, update, and repair from the official GitHub release, including release/ZIP validation, Saved Games deployment, `MissionScripting.lua` wiring, autostart configuration, version/port status, rollback, and timestamped backups
 - resilient DCS-gRPC live-data adapter for health/version, active mission, pause state, mission time, simulation FPS, connected players, ping/coalition/airframe details, incoming chat, and outgoing administrator chat
+- DCS-gRPC moderation controls for kick, temporary ban, and move-to-spectators, with confirmation, operator reasons, failure reporting, and a persistent SQLite audit trail
 - process and local-port status detection for SRS, Olympus, Tacview, and SkyEye, plus launch/restart controls where an executable is configured
 - Digital Kneeboard Simulator launch into its hosted sign-in page
 - embedded integration window with a new-tab fallback
@@ -30,11 +31,11 @@ Working now:
 Adapter work still required after DCS is installed:
 
 - use DCS-gRPC hook operations for mission loading and lifecycle control instead of process-level fallbacks where possible
-- add DCS-gRPC kick, ban, and spectator controls with an audit trail and confirmation flow
+- add ban-list review/unban controls and richer moderation-audit filtering
 - add installer/update workflows for the remaining third-party tools and, where useful, direct editing of each tool's native configuration file
 - test iframe headers for Olympus and Digital Kneeboard; use a host-side reverse proxy or new tab where framing is blocked
 
-Live player, mission, simulation FPS, and chat data now come from DCS-gRPC when its health RPC succeeds. Every RPC is best-effort and cached outside the dashboard snapshot loop, so a missing field or interrupted event stream cannot break the UI. The API still returns `501 Not Implemented` for moderation instead of claiming those actions succeeded. Mission selection is stored and the process is restarted; replacing that fallback with DCS-gRPC's hook-level mission loading is the next control-plane step.
+Windows process discovery remains authoritative for whether DCS is running and for process uptime; executable metadata, performance counters, files, and Lua configuration remain the primary sources for host and server facts. DCS-gRPC only enriches runtime fields that Groundcrew cannot read reliably from those direct sources, such as live players, mission FPS, pause state, and chat. Every read RPC is best-effort and cached outside the dashboard snapshot loop, so a missing field or interrupted event stream cannot break the UI. Mission selection is stored and the process is restarted; replacing that fallback with DCS-gRPC's hook-level mission loading is the next control-plane step.
 
 The server configuration page's **Maximum players** value is DCS's global connection cap. Groundcrew can summarize static Client and Player slots from each `.miz`, but changing those slots remains a DCS Mission Editor task. Runtime scripts may create behavior that cannot be determined safely without executing mission code, so Groundcrew reports recognized frameworks without trying to emulate Olympus or DCS itself.
 

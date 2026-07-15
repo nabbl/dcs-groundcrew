@@ -60,6 +60,35 @@ public sealed class DcsGrpcLiveService : BackgroundService
         AddChat("ADMIN", text, false);
     }
 
+    public async Task KickPlayerAsync(uint playerId, string? reason, CancellationToken cancellationToken = default)
+    {
+        var clients = await GetClientsAsync();
+        await clients.Net.KickPlayerAsync(
+            new NetContract.KickPlayerRequest { Id = playerId, Message = ModerationReason(reason, "Removed by a Groundcrew administrator.") },
+            deadline: DateTime.UtcNow.AddSeconds(3),
+            cancellationToken: cancellationToken).ResponseAsync;
+    }
+
+    public async Task MoveToSpectatorsAsync(uint playerId, CancellationToken cancellationToken = default)
+    {
+        var clients = await GetClientsAsync();
+        await clients.Net.ForcePlayerSlotAsync(
+            new NetContract.ForcePlayerSlotRequest { PlayerId = playerId, Coalition = Coalition.Neutral, SlotId = "" },
+            deadline: DateTime.UtcNow.AddSeconds(3),
+            cancellationToken: cancellationToken).ResponseAsync;
+    }
+
+    public async Task BanPlayerAsync(uint playerId, uint durationSeconds, string? reason, CancellationToken cancellationToken = default)
+    {
+        if (durationSeconds is < 60 or > 31_536_000) throw new ArgumentOutOfRangeException(nameof(durationSeconds), "Ban duration must be between one minute and one year.");
+        var clients = await GetClientsAsync();
+        var response = await clients.Hook.BanPlayerAsync(
+            new HookContract.BanPlayerRequest { Id = playerId, Period = durationSeconds, Reason = ModerationReason(reason, "Banned by a Groundcrew administrator.") },
+            deadline: DateTime.UtcNow.AddSeconds(3),
+            cancellationToken: cancellationToken).ResponseAsync;
+        if (!response.Banned) throw new InvalidOperationException("DCS declined the ban request.");
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var poll = PollLoopAsync(stoppingToken);
@@ -280,6 +309,11 @@ public sealed class DcsGrpcLiveService : BackgroundService
     }
 
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    private static string ModerationReason(string? value, string fallback)
+    {
+        var reason = Clean(value) ?? fallback;
+        return reason.Length <= 240 ? reason : reason[..240];
+    }
     private void Publish(DcsGrpcLiveSnapshot value) => Volatile.Write(ref _snapshot, value);
     private static DcsGrpcLiveSnapshot Empty(string error) => new(false, null, null, null, null, null, null, Array.Empty<Player>(), Array.Empty<ChatMessage>(), null, error);
     private static string Describe(Exception exception)

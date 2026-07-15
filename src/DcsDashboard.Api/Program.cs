@@ -26,6 +26,7 @@ builder.Services.AddHttpClient("github-releases", client =>
     client.Timeout = TimeSpan.FromMinutes(3);
 });
 builder.Services.AddSingleton<SettingsStore>();
+builder.Services.AddSingleton<ModerationAuditStore>();
 builder.Services.AddSingleton<DcsProcessService>();
 builder.Services.AddSingleton<HostMetricsService>();
 builder.Services.AddSingleton<IntegrationService>();
@@ -151,7 +152,41 @@ app.MapPost("/api/chat", async (ChatSendRequest request, DcsGrpcLiveService serv
     catch (RpcException ex) { return Results.Conflict(new { error = $"DCS-gRPC did not accept the chat message: {ex.Status.Detail}" }); }
     catch (Exception ex) { return Results.Problem($"DCS-gRPC chat is unavailable: {ex.Message}", statusCode: 503); }
 });
-app.MapPost("/api/players/{playerId}/{action}", (string playerId, string action, ModerationRequest _) => Results.Problem($"The DCS moderation adapter is not configured; '{action}' was not sent for player '{playerId}'.", statusCode: 501));
+app.MapGet("/api/moderation/audit", async (int? limit, ModerationAuditStore audit) => Results.Ok(await audit.ListRecentAsync(limit ?? 100)));
+app.MapPost("/api/players/{playerId}/{action}", async (string playerId, string action, ModerationRequest request, DcsGrpcLiveService grpc, ModerationAuditStore audit, CancellationToken cancellationToken) =>
+{
+    action = action.ToLowerInvariant();
+    if (action is not ("kick" or "ban" or "spectate")) return Results.BadRequest(new { error = "Action must be kick, ban, or spectate." });
+    if (!uint.TryParse(playerId, out var numericPlayerId)) return Results.BadRequest(new { error = "DCS-gRPC requires a numeric player session ID." });
+    var livePlayer = grpc.GetSnapshot().Players.FirstOrDefault(player => player.Id == playerId);
+    var playerName = string.IsNullOrWhiteSpace(request.PlayerName) ? livePlayer?.Name ?? $"Player {playerId}" : request.PlayerName.Trim();
+    var reason = string.IsNullOrWhiteSpace(request.Reason) ? "No reason supplied." : request.Reason.Trim();
+    if (playerName.Length > 100) playerName = playerName[..100];
+    if (reason.Length > 240) reason = reason[..240];
+    var createdAt = DateTimeOffset.UtcNow;
+    try
+    {
+        switch (action)
+        {
+            case "kick": await grpc.KickPlayerAsync(numericPlayerId, reason, cancellationToken); break;
+            case "spectate": await grpc.MoveToSpectatorsAsync(numericPlayerId, cancellationToken); break;
+            case "ban": await grpc.BanPlayerAsync(numericPlayerId, request.DurationSeconds ?? 86_400, reason, cancellationToken); break;
+        }
+        var entry = new ModerationAuditEntry(Guid.NewGuid().ToString("N"), playerId, playerName, action, reason, action == "ban" ? request.DurationSeconds ?? 86_400 : null, true, null, createdAt);
+        await audit.AppendAsync(entry);
+        return Results.Ok(entry);
+    }
+    catch (Exception exception)
+    {
+        var error = exception is RpcException rpc ? rpc.Status.Detail : exception.Message;
+        if (error.Length > 500) error = error[..500];
+        var entry = new ModerationAuditEntry(Guid.NewGuid().ToString("N"), playerId, playerName, action, reason, action == "ban" ? request.DurationSeconds ?? 86_400 : null, false, error, createdAt);
+        try { await audit.AppendAsync(entry); } catch { }
+        return exception is ArgumentException
+            ? Results.BadRequest(new { error })
+            : Results.Conflict(new { error = $"DCS-gRPC could not {action} {playerName}: {error}" });
+    }
+});
 
 app.MapHub<DashboardHub>("/hubs/dashboard");
 app.MapFallbackToFile("index.html");

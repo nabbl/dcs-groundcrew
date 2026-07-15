@@ -6,9 +6,9 @@ import {
   Play, PlugZap, Power, Radio, RefreshCw, RotateCcw, Send, Server, Settings,
   ShieldAlert, Square, Users, X, Info,
 } from 'lucide-react'
-import { browseServer, getGrpcStatus, getMissionLibrary, getServerConfiguration, getSettings, getSnapshot, inspectMission, installGrpc, integrationAction, saveServerConfiguration, saveSettings, sendChatMessage, serverAction, subscribeToSnapshots, switchMission } from './api'
+import { browseServer, getGrpcStatus, getMissionLibrary, getServerConfiguration, getSettings, getSnapshot, inspectMission, installGrpc, integrationAction, moderatePlayer, saveServerConfiguration, saveSettings, sendChatMessage, serverAction, subscribeToSnapshots, switchMission } from './api'
 import { mockGrpcStatus, mockMissionLibrary, mockMissionReadiness, mockServerConfiguration, mockSettings, mockSnapshot } from './mockData'
-import type { DashboardSettings, DashboardSnapshot, DcsServerConfiguration, DcsServerConfigurationUpdate, FileBrowserResult, GrpcInstallationResult, GrpcInstallationStatus, Integration, MissionFile, MissionLibraryResult, MissionReadinessReport, Player, ServerState } from './types'
+import type { DashboardSettings, DashboardSnapshot, DcsServerConfiguration, DcsServerConfigurationUpdate, FileBrowserResult, GrpcInstallationResult, GrpcInstallationStatus, Integration, MissionFile, MissionLibraryResult, MissionReadinessReport, ModerationAction, Player, ServerState } from './types'
 
 type Page = 'overview' | 'missions' | 'serverConfig' | 'players' | 'integrations' | 'chat' | 'settings'
 
@@ -45,13 +45,13 @@ function MetricCard({ icon: Icon, label, value, detail, progress }: { icon: type
   )
 }
 
-function PlayerRow({ player, compact = false }: { player: Player; compact?: boolean }) {
+function PlayerRow({ player, compact = false, onModerate }: { player: Player; compact?: boolean; onModerate?: (player: Player) => void }) {
   return (
     <div className={`player-row ${compact ? 'compact' : ''}`}>
       <span className={`coalition ${player.side.toLowerCase()}`}>{player.side.slice(0, 1)}</span>
       <div className="player-name"><strong>{player.name}</strong><small>{player.slot}</small></div>
       <span className="ping"><Network size={13} /> {player.ping} ms</span>
-      {!compact && <button className="icon-button" aria-label={`Moderate ${player.name}`}><MoreHorizontal size={18} /></button>}
+      {!compact && <button className="icon-button" aria-label={`Moderate ${player.name}`} onClick={() => onModerate?.(player)}><MoreHorizontal size={18} /></button>}
     </div>
   )
 }
@@ -290,8 +290,38 @@ function ServerConfigurationPage({ demoMode, onOpenSettings }: { demoMode: boole
   </section>
 }
 
-function Players({ players }: { players: Player[] }) {
-  return <section className="panel page-panel"><header className="panel-header large"><div><span className="eyebrow">LIVE ROSTER</span><h1>Connected players</h1><p>{players.length} players currently connected. Moderation actions are logged.</p></div></header><div className="rows roomy">{players.map(p => <PlayerRow key={p.id} player={p} />)}</div><div className="moderation-note"><ShieldAlert size={18} /><div><strong>Moderation controls</strong><span>Open a player’s action menu to kick, ban, mute, or move them to spectators.</span></div></div></section>
+function Players({ players, demoMode, onRefresh }: { players: Player[]; demoMode: boolean; onRefresh: () => Promise<void> }) {
+  const [moderating, setModerating] = useState<Player | null>(null)
+  const [notice, setNotice] = useState('')
+  return <><section className="panel page-panel"><header className="panel-header large"><div><span className="eyebrow">LIVE ROSTER</span><h1>Connected players</h1><p>{players.length} players currently connected. Moderation actions are sent through DCS-gRPC and recorded locally.</p></div>{notice && <span className="moderation-success"><Activity size={14} />{notice}</span>}</header><div className="rows roomy">{players.map(p => <PlayerRow key={p.id} player={p} onModerate={setModerating} />)}</div><div className="moderation-note"><ShieldAlert size={18} /><div><strong>Moderation controls</strong><span>Kick, temporarily ban, or move a player to spectators. Every attempt is written to Groundcrew’s audit database.</span></div></div></section>{moderating && <PlayerModerationDialog player={moderating} demoMode={demoMode} onComplete={async message => { setNotice(message); setModerating(null); await onRefresh() }} onClose={() => setModerating(null)} />}</>
+}
+
+function PlayerModerationDialog({ player, demoMode, onComplete, onClose }: { player: Player; demoMode: boolean; onComplete: (message: string) => Promise<void>; onClose: () => void }) {
+  const [action, setAction] = useState<ModerationAction>('spectate')
+  const [reason, setReason] = useState('')
+  const [durationSeconds, setDurationSeconds] = useState(86400)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const submit = async () => {
+    setBusy(true); setError('')
+    const response = demoMode ? { ok: true } : await moderatePlayer(player.id, player.name, action, reason.trim(), durationSeconds)
+    if (!response.ok) { setError(response.error ?? 'The moderation action failed.'); setBusy(false); return }
+    const verb = action === 'spectate' ? 'moved to spectators' : action === 'ban' ? 'banned' : 'kicked'
+    await onComplete(`${player.name} was ${verb}.`)
+    setBusy(false)
+  }
+  const actionLabel = action === 'spectate' ? 'Move to spectators' : action === 'ban' ? 'Ban player' : 'Kick player'
+  return <div className="dialog-backdrop" role="presentation" onMouseDown={() => !busy && onClose()}><div className="integration-dialog moderation-dialog" role="dialog" aria-modal="true" aria-label={`Moderate ${player.name}`} onMouseDown={event => event.stopPropagation()}>
+    <header><div><span className="eyebrow">DCS-GRPC MODERATION</span><h2>{player.name}</h2><p>{player.side} · {player.slot} · {player.ping} ms</p></div><button className="icon-button" disabled={busy} onClick={onClose} aria-label="Close moderation"><X size={19} /></button></header>
+    <div className="config-form moderation-form">
+      <div className="moderation-actions"><button className={action === 'spectate' ? 'selected' : ''} onClick={() => setAction('spectate')}><Users size={18} /><strong>Spectators</strong><small>Remove the player from their current slot without disconnecting.</small></button><button className={action === 'kick' ? 'selected' : ''} onClick={() => setAction('kick')}><Power size={18} /><strong>Kick</strong><small>Disconnect the player with the supplied reason.</small></button><button className={action === 'ban' ? 'selected danger' : 'danger'} onClick={() => setAction('ban')}><Ban size={18} /><strong>Ban</strong><small>Disconnect the player and prevent reconnection temporarily.</small></button></div>
+      {action === 'ban' && <label className="config-field"><span>Ban duration</span><select value={durationSeconds} onChange={event => setDurationSeconds(Number(event.target.value))}><option value={3600}>1 hour</option><option value={86400}>24 hours</option><option value={604800}>7 days</option><option value={2592000}>30 days</option><option value={31536000}>1 year</option></select></label>}
+      <label className="config-field"><span>Reason {action === 'spectate' ? '(audit log only)' : '(shown to player)'}</span><textarea value={reason} maxLength={240} onChange={event => setReason(event.target.value)} placeholder={action === 'spectate' ? 'Optional operator note' : 'Reason for this action'} /></label>
+      <div className="config-note">This command uses the configured DCS-gRPC connection, but Windows process state, uptime, DCS version, host metrics, paths, and server configuration remain sourced directly by Groundcrew.</div>
+      {error && <div className="integration-error"><ShieldAlert size={14} />{error}</div>}
+    </div>
+    <footer><button className="button ghost" disabled={busy} onClick={onClose}>Cancel</button><button className={`button ${action === 'ban' ? 'danger' : 'primary'}`} disabled={busy} onClick={() => void submit()}>{busy ? <><RefreshCw className="spin" size={15} /> Sending…</> : actionLabel}</button></footer>
+  </div></div>
 }
 
 function Integrations({ integrations, settings, demoMode, onSaveSettings, onRefresh }: { integrations: Integration[]; settings: DashboardSettings; demoMode: boolean; onSaveSettings: (settings: DashboardSettings) => Promise<boolean>; onRefresh: () => Promise<void> }) {
@@ -512,7 +542,7 @@ export default function App() {
           {page === 'overview' && <Overview data={data} onNavigate={setPage} />}
           {page === 'missions' && <Missions settings={settings} demoMode={data.demoMode} olympusUrl={olympus?.url ?? settings.integrations.find(item => item.id === 'olympus')?.url} onSwitch={value => setPending({ kind: 'mission', value })} onOpenSettings={() => setPage('settings')} />}
           {page === 'serverConfig' && <ServerConfigurationPage demoMode={data.demoMode} onOpenSettings={() => setPage('settings')} />}
-          {page === 'players' && <Players players={data.players} />}
+          {page === 'players' && <Players players={data.players} demoMode={data.demoMode} onRefresh={refreshSnapshot} />}
           {page === 'integrations' && <Integrations integrations={data.integrations} settings={settings} demoMode={data.demoMode} onSaveSettings={persistSettings} onRefresh={refreshSnapshot} />}
           {page === 'chat' && <Chat data={data} />}
           {page === 'settings' && <SettingsPage settings={settings} onSave={persistSettings} />}

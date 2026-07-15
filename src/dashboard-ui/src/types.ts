@@ -16,6 +16,20 @@ export interface Player {
   joinedAt: string
 }
 
+export type ModerationAction = 'kick' | 'ban' | 'spectate'
+
+export interface ModerationAuditEntry {
+  id: string
+  playerId: string
+  playerName: string
+  action: ModerationAction
+  reason: string
+  durationSeconds: number | null
+  succeeded: boolean
+  error: string | null
+  createdAt: string
+}
+
 export interface Integration {
   id: string
   name: string
