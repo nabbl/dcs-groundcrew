@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Activity, Ban, ChevronRight, CircleGauge, Clock3, Cpu, ExternalLink,
+  Activity, Ban, ChevronRight, CircleGauge, Clock3, Coffee, Cpu, ExternalLink,
   Download, FileArchive, FolderCog, Gauge, HardDrive, Headphones, Home, LayoutDashboard,
   MemoryStick, MessageSquareText, MoreHorizontal, Network, PanelLeftClose, PanelLeftOpen,
   Play, PlugZap, Power, Radio, RefreshCw, RotateCcw, Send, Server, Settings,
@@ -644,7 +644,7 @@ export default function App() {
       </aside>
 
       <main className="workspace">
-        <header className="topbar"><div><span>GROUNDCREW</span><strong>{title}</strong></div><div className="topbar-meta">{data.demoMode && <span className="demo-badge">PREVIEW DATA</span>}<span><StateDot state={data.server.state} /> Host connected</span><span>14:38 CEST</span></div></header>
+        <header className="topbar"><div><span>GROUNDCREW</span><strong>{title}</strong></div><div className="topbar-right"><div className="topbar-meta">{data.demoMode && <span className="demo-badge">PREVIEW DATA</span>}<span><StateDot state={data.server.state} /> Host connected</span><span>14:38 CEST</span></div><a className="support-link" href="https://ko-fi.com/nabblsawesome" target="_blank" rel="noreferrer noopener" aria-label="Buy me a coffee on Ko-fi"><Coffee size={14} /><span>Buy me a coffee</span></a></div></header>
         <div className="page-content">
           {page === 'overview' && <Overview data={data} onNavigate={setPage} />}
           {page === 'missions' && <Missions settings={settings} demoMode={data.demoMode} olympusUrl={olympus?.url ?? settings.integrations.find(item => item.id === 'olympus')?.url} onSwitch={value => setPending({ kind: 'mission', value })} onOpenSettings={() => setPage('settings')} />}
