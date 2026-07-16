@@ -153,6 +153,8 @@ export interface DashboardSettings {
     url?: string
     remote?: boolean
     remoteHost?: string
+    enabled?: boolean
+    startWithDcs?: boolean
   }>
 }
 

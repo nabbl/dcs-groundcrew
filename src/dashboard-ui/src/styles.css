@@ -247,6 +247,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .config-field select { appearance: none; cursor: pointer; }
 .integration-mode-toggle { padding: 0 13px; background: rgba(246,168,23,.035); border: 1px solid rgba(246,168,23,.15); }
 .integration-mode-toggle .config-toggle { border-bottom: 0; }
+.integration-mode-toggle .config-toggle + .config-toggle { border-top: 1px solid rgba(255,255,255,.045); }
 .config-pair { display: grid; grid-template-columns: 1fr 160px; gap: 14px; }
 .config-pair label { display: grid; gap: 7px; }
 .config-note { padding: 13px 14px; color: #999fa2; background: rgba(246,168,23,.045); border: 1px solid rgba(246,168,23,.15); font-size: 10px; line-height: 1.55; }

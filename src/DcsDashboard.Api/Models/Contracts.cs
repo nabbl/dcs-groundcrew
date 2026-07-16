@@ -64,6 +64,8 @@ public sealed class IntegrationSettings
     public string? Url { get; set; }
     public bool Remote { get; set; }
     public string RemoteHost { get; set; } = "";
+    public bool Enabled { get; set; }
+    public bool StartWithDcs { get; set; }
 
     public static List<IntegrationSettings> Defaults() => new()
     {

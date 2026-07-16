@@ -88,15 +88,16 @@ function IntegrationRow({ item, config, grpcStatus, expanded, busy, error, onExp
   const remoteHost = config?.remoteHost || hostFromUrl(config?.url)
   const installed = remoteSkyEye ? Boolean(remoteHost) : managedGrpc && grpcStatus ? grpcStatus.installed : item.installed
   const running = managedGrpc ? Boolean(grpcStatus?.running || item.running) : item.running
+  const disabledOlympus = item.id === 'olympus' && !config?.enabled
   const endpoint = remoteSkyEye ? remoteHost : item.url ?? (config?.port ? `${config.host || '127.0.0.1'}:${config.port}` : undefined)
-  const status = managedGrpc ? running ? 'Connected' : installed ? 'Installed · offline' : 'Not installed' : remoteSkyEye ? running ? 'Remote host reachable' : installed ? 'No ping response' : 'Not configured' : webOnly ? (installed ? 'Web app' : 'Not configured') : running ? 'Running' : installed ? 'Installed' : 'Not configured'
+  const status = disabledOlympus ? installed ? 'Installed · disabled' : 'Disabled' : managedGrpc ? running ? 'Connected' : installed ? 'Installed · offline' : 'Not installed' : remoteSkyEye ? running ? 'Remote host reachable' : installed ? 'No ping response' : 'Not configured' : webOnly ? (installed ? 'Web app' : 'Not configured') : running ? 'Running' : installed ? 'Installed' : 'Not configured'
   return (
     <article className={`integration-row ${expanded ? 'expanded' : ''}`}>
       <button className="integration-summary" onClick={onExpand}>
         <span className="integration-mark"><IntegrationIcon id={item.id} /></span>
         <span className="integration-copy"><strong>{item.name}</strong><small>{item.description}</small></span>
-        <span className={`status-label ${running || webOnly && installed ? 'good' : installed ? 'idle' : 'missing'}`}>
-          <StateDot state={running || webOnly && installed} />{status}
+        <span className={`status-label ${!disabledOlympus && (running || webOnly && installed) ? 'good' : installed ? 'idle' : 'missing'}`}>
+          <StateDot state={!disabledOlympus && (running || webOnly && installed)} />{status}
         </span>
         <ChevronRight className="row-chevron" size={19} />
       </button>
@@ -104,9 +105,10 @@ function IntegrationRow({ item, config, grpcStatus, expanded, busy, error, onExp
         <div className="integration-detail">
           <div><span>Version</span><strong>{managedGrpc ? grpcStatus?.installedVersion ?? '—' : item.version ?? '—'}</strong></div>
           <div><span>{webOnly || item.kind === 'web-process' ? 'Web interface' : 'Endpoint'}</span><strong>{endpoint ?? 'Not configured'}</strong></div>
+          {item.id === 'olympus' && <div><span>Start with DCS</span><strong>{config?.enabled && config.startWithDcs ? 'Enabled' : 'Off'}</strong></div>}
           {managedGrpc && grpcStatus && <div className="grpc-health"><span className={grpcStatus.loaderConfigured ? 'ready' : ''}>Mission loader <strong>{grpcStatus.loaderConfigured ? 'Ready' : 'Missing'}</strong></span><span className={grpcStatus.autostartConfigured ? 'ready' : ''}>Autostart <strong>{grpcStatus.autostartConfigured ? 'On' : 'Off'}</strong></span><span className={!grpcStatus.updateAvailable ? 'ready' : ''}>Latest <strong>{grpcStatus.latestVersion ?? 'Unknown'}</strong></span></div>}
           <div className="integration-actions">
-            {!webOnly && item.kind !== 'telemetry' && !managedGrpc && !remoteSkyEye && installed && <button className="button outline" disabled={busy} onClick={onRestart}><RefreshCw className={busy ? 'spin' : ''} size={15} /> Restart</button>}
+            {!webOnly && item.kind !== 'telemetry' && !managedGrpc && !remoteSkyEye && !disabledOlympus && installed && <button className="button outline" disabled={busy} onClick={onRestart}><RefreshCw className={busy ? 'spin' : ''} size={15} /> Restart</button>}
             {managedGrpc ? <button className={installed ? 'button ghost' : 'button primary'} onClick={onManage}><Download size={15} /> {grpcStatus?.updateAvailable ? 'Update' : installed ? 'Repair / configure' : 'Install DCS-gRPC'}</button> : <button className={installed ? 'button ghost' : 'button outline'} onClick={onConfigure}>{installed ? <Settings size={15} /> : <HardDrive size={15} />} {installed ? 'Configuration' : 'Configure'}</button>}
             {item.url && <button className="button ghost" onClick={onOpen}><ExternalLink size={15} /> {item.id === 'dks' ? 'Open & sign in' : 'Open tool'}</button>}
           </div>
@@ -443,6 +445,10 @@ function IntegrationConfigDialog({ config, settings, onSave, onClose }: { config
     setError('')
   }
   const save = async () => {
+    if (value.id === 'olympus' && value.enabled && (!value.executablePath.trim() || !value.configPath.trim())) {
+      setError('Select both the Olympus server.vbs launcher and this DCS instance’s Config\\olympus.json file before enabling it.')
+      return
+    }
     if (value.id === 'skyeye' && value.remote) {
       if (!validRemoteHost(value.remoteHost)) {
         setError('Enter the hostname or IP address of the computer running SkyEye.')
@@ -476,19 +482,20 @@ function IntegrationConfigDialog({ config, settings, onSave, onClose }: { config
   return <><div className="dialog-backdrop" role="presentation" onMouseDown={onClose}><div className="integration-dialog" role="dialog" aria-modal="true" aria-label={`Configure ${value.name}`} onMouseDown={event => event.stopPropagation()}>
     <header><div><span className="eyebrow">INTEGRATION CONFIGURATION</span><h2>{value.name}</h2><p>{value.description}</p></div><button className="icon-button" onClick={onClose} aria-label="Close configuration"><X size={19} /></button></header>
     <div className="config-form">
+      {value.id === 'olympus' && <div className="integration-mode-toggle"><ConfigToggle label="Enable Olympus integration" detail="Allow Groundcrew to open and control this explicitly configured Olympus instance." checked={value.enabled === true} onChange={next => update('enabled', next)} />{value.enabled && <ConfigToggle label="Start automatically with DCS" detail="Launch the Olympus server before Groundcrew starts DCS. Olympus launch errors will not block DCS startup." checked={value.startWithDcs === true} onChange={next => update('startWithDcs', next)} />}</div>}
       {value.id === 'skyeye' && <div className="integration-mode-toggle"><ConfigToggle label="Remote SkyEye" detail="SkyEye runs on another computer; Groundcrew checks whether that host is reachable." checked={remoteSkyEye} onChange={next => update('remote', next)} /></div>}
-      {value.kind !== 'web' && value.id !== 'tacview' && !remoteSkyEye && <ConfigPathField label="Executable" value={value.executablePath} onChange={next => update('executablePath', next)} onBrowse={() => setBrowsing('executablePath')} />}
-      {value.kind !== 'web' && !remoteSkyEye && <ConfigPathField label={value.id === 'tacview' ? 'DCS options file' : 'Configuration file'} value={value.configPath} onChange={next => update('configPath', next)} onBrowse={() => setBrowsing('configPath')} />}
+      {value.kind !== 'web' && value.id !== 'tacview' && !remoteSkyEye && <ConfigPathField label={value.id === 'olympus' ? 'Olympus server launcher' : 'Executable'} value={value.executablePath} onChange={next => update('executablePath', next)} onBrowse={() => setBrowsing('executablePath')} />}
+      {value.kind !== 'web' && !remoteSkyEye && <ConfigPathField label={value.id === 'tacview' ? 'DCS options file' : value.id === 'olympus' ? 'Olympus instance configuration' : 'Configuration file'} value={value.configPath} onChange={next => update('configPath', next)} onBrowse={() => setBrowsing('configPath')} />}
       {(value.id === 'srs' || value.id === 'olympus' || value.id === 'tacview') && <div className="config-pair"><label><span>Host</span><input value={value.host} onChange={event => update('host', event.target.value)} placeholder="127.0.0.1" /></label><label><span>Port</span><input type="number" min="1" max="65535" value={value.port ?? ''} onChange={event => update('port', event.target.value ? Number(event.target.value) : undefined)} /></label></div>}
       {value.id === 'skyeye' && !remoteSkyEye && <><label className="config-field"><span>SRS server address</span><input value={value.srsAddress} onChange={event => update('srsAddress', event.target.value)} placeholder="127.0.0.1:5002" /></label><label className="config-field"><span>Tacview telemetry address</span><input value={value.telemetryAddress} onChange={event => update('telemetryAddress', event.target.value)} placeholder="127.0.0.1:42674" /></label></>}
       {remoteSkyEye && <label className="config-field"><span>Remote hostname or IP address</span><input value={value.remoteHost ?? ''} onChange={event => update('remoteHost', event.target.value)} placeholder="skyeye-pc or 100.64.0.10" /></label>}
       {(value.kind === 'web' || value.kind === 'web-process' || remoteSkyEye) && <label className="config-field"><span>{remoteSkyEye ? 'Management URL (optional)' : 'Web URL'}</span><input type="url" value={value.url ?? ''} onChange={event => update('url', event.target.value)} placeholder={remoteSkyEye ? 'http://skyeye-pc' : 'http://127.0.0.1:3000'} /></label>}
-      {value.kind !== 'web' && value.id !== 'tacview' && !remoteSkyEye && <label className="config-field"><span>Launch arguments</span><input value={value.arguments} onChange={event => update('arguments', event.target.value)} placeholder={value.id === 'skyeye' ? '--config-file config.yaml' : 'Optional'} /></label>}
-      <div className="config-note">{value.id === 'srs' && 'SRS normally listens on TCP and UDP port 5002. Groundcrew detects the running service from the process or local TCP listener.'}{value.id === 'olympus' && 'Olympus normally exposes its frontend over HTTP on port 3000. The URL is used for the embedded tool view.'}{value.id === 'tacview' && 'Tacview real-time telemetry defaults to TCP 42674. Recording storage is configured separately under Server paths.'}{value.id === 'skyeye' && (remoteSkyEye ? 'Groundcrew pings this hostname or IP address every 15 seconds. This confirms that the remote computer is reachable, but not that the SkyEye process itself is healthy. Tailscale IP addresses and MagicDNS names work. Add a management URL only if that computer already provides one.' : 'SkyEye connects to both SRS and Tacview. Its Windows config.yaml normally sits beside skyeye.exe.')}{value.id === 'dks' && 'DKS is a hosted web application. Groundcrew opens it in a new browser tab so you can sign in with Discord or Google.'}</div>
+      {value.kind !== 'web' && value.id !== 'tacview' && value.id !== 'olympus' && !remoteSkyEye && <label className="config-field"><span>Launch arguments</span><input value={value.arguments} onChange={event => update('arguments', event.target.value)} placeholder={value.id === 'skyeye' ? '--config-file config.yaml' : 'Optional'} /></label>}
+      <div className="config-note">{value.id === 'srs' && 'SRS normally listens on TCP and UDP port 5002. Groundcrew detects the running service from the process or local TCP listener.'}{value.id === 'olympus' && 'Groundcrew detects server.vbs under Saved Games\\DCS Olympus and Config\\olympus.json under this DCS instance. The frontend port is read from olympus.json. Detection never enables or starts Olympus without these switches.'}{value.id === 'tacview' && 'Tacview real-time telemetry defaults to TCP 42674. Recording storage is configured separately under Server paths.'}{value.id === 'skyeye' && (remoteSkyEye ? 'Groundcrew pings this hostname or IP address every 15 seconds. This confirms that the remote computer is reachable, but not that the SkyEye process itself is healthy. Tailscale IP addresses and MagicDNS names work. Add a management URL only if that computer already provides one.' : 'SkyEye connects to both SRS and Tacview. Its Windows config.yaml normally sits beside skyeye.exe.')}{value.id === 'dks' && 'DKS is a hosted web application. Groundcrew opens it in a new browser tab so you can sign in with Discord or Google.'}</div>
       {error && <div className="integration-error"><ShieldAlert size={14} />{error}</div>}
     </div>
     <footer><button className="button ghost" onClick={onClose}>Cancel</button>{testUrl && <a className="button outline" href={testUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} /> Test URL</a>}<button className="button primary" disabled={saving} onClick={() => void save()}>{saving ? 'Saving…' : 'Save configuration'}</button></footer>
-  </div></div>{browsing && <FileBrowserDialog title={`Select ${browsing === 'executablePath' ? 'executable' : 'configuration file'}`} initialPath={browsePath.replace(/[\\/][^\\/]+$/, '') || undefined} extension={browsing === 'executablePath' ? '.exe' : undefined} onSelect={path => { update(browsing, path); setBrowsing(null) }} onClose={() => setBrowsing(null)} />}</>
+  </div></div>{browsing && <FileBrowserDialog title={`Select ${browsing === 'executablePath' ? value.id === 'olympus' ? 'server.vbs' : 'executable' : 'configuration file'}`} initialPath={browsePath.replace(/[\\/][^\\/]+$/, '') || undefined} extension={browsing === 'executablePath' ? value.id === 'olympus' ? '.vbs' : '.exe' : value.id === 'olympus' ? '.json' : undefined} onSelect={path => { update(browsing, path); setBrowsing(null) }} onClose={() => setBrowsing(null)} />}</>
 }
 
 function ConfigPathField({ label, value, onChange, onBrowse }: { label: string; value: string; onChange: (value: string) => void; onBrowse: () => void }) {

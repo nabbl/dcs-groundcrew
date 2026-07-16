@@ -7,13 +7,15 @@ public sealed class DcsProcessService
 {
     private readonly SettingsStore _settings;
     private readonly InteractiveProcessLauncher _launcher;
+    private readonly IntegrationService _integrations;
     private readonly ILogger<DcsProcessService> _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
-    public DcsProcessService(SettingsStore settings, InteractiveProcessLauncher launcher, ILogger<DcsProcessService> logger)
+    public DcsProcessService(SettingsStore settings, InteractiveProcessLauncher launcher, IntegrationService integrations, ILogger<DcsProcessService> logger)
     {
         _settings = settings;
         _launcher = launcher;
+        _integrations = integrations;
         _logger = logger;
     }
 
@@ -37,6 +39,7 @@ public sealed class DcsProcessService
             if (string.IsNullOrWhiteSpace(settings.DcsExecutablePath) || !File.Exists(settings.DcsExecutablePath))
                 throw new InvalidOperationException("Configure a valid DCS executable path before starting the server.");
 
+            await _integrations.StartConfiguredWithDcsAsync();
             var workingDirectory = Path.GetDirectoryName(settings.DcsExecutablePath)!;
             var launched = _launcher.Start(settings.DcsExecutablePath, settings.DcsArguments, workingDirectory);
             await Task.Delay(TimeSpan.FromSeconds(2));

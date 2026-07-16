@@ -12,7 +12,7 @@ public sealed class InteractiveProcessLauncher
     private const uint CreateUnicodeEnvironment = 0x00000400;
     private static readonly nint CurrentServer = nint.Zero;
 
-    public InteractiveLaunchResult Start(string executablePath, string arguments, string workingDirectory)
+    public InteractiveLaunchResult Start(string executablePath, string arguments, string workingDirectory, string displayName = "DCS")
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -20,13 +20,13 @@ public sealed class InteractiveProcessLauncher
             {
                 WorkingDirectory = workingDirectory,
                 UseShellExecute = false
-            }) ?? throw new InvalidOperationException("The operating system did not start the DCS process.");
+            }) ?? throw new InvalidOperationException($"The operating system did not start {displayName}.");
             return new(process, null);
         }
 
         var sessionId = FindInteractiveSession();
         if (sessionId is null)
-            throw new InvalidOperationException("DCS needs a signed-in Windows desktop session. Sign in to the DCS server PC, then start the server again from Groundcrew.");
+            throw new InvalidOperationException($"{displayName} needs a signed-in Windows desktop session. Sign in to the DCS server PC, then try again from Groundcrew.");
 
         if (!WTSQueryUserToken((uint)sessionId.Value, out var userToken))
             throw WindowsError($"Groundcrew could not access Windows session {sessionId}. Ensure the Groundcrew service is running as Local System");
@@ -56,7 +56,7 @@ public sealed class InteractiveProcessLauncher
                     workingDirectory,
                     ref startup,
                     out var processInformation))
-                throw WindowsError($"Windows could not launch DCS in interactive session {sessionId}");
+                throw WindowsError($"Windows could not launch {displayName} in interactive session {sessionId}");
 
             try
             {

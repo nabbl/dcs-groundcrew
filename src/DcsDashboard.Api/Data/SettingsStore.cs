@@ -88,5 +88,49 @@ public sealed class SettingsStore
             if (string.IsNullOrWhiteSpace(existing.TelemetryAddress)) existing.TelemetryAddress = defaults.TelemetryAddress;
             existing.Url ??= defaults.Url;
         }
+
+        DiscoverOlympus(settings);
+    }
+
+    private static void DiscoverOlympus(DashboardSettings settings)
+    {
+        var olympus = settings.Integrations.FirstOrDefault(item => string.Equals(item.Id, "olympus", StringComparison.OrdinalIgnoreCase));
+        if (olympus is null || string.IsNullOrWhiteSpace(settings.SavedGamesPath)) return;
+
+        var dcsSavedGames = settings.SavedGamesPath.Trim();
+        var savedGamesRoot = Directory.GetParent(dcsSavedGames)?.FullName;
+        var configCandidate = Path.Combine(dcsSavedGames, "Config", "olympus.json");
+        if ((string.IsNullOrWhiteSpace(olympus.ConfigPath) || !File.Exists(olympus.ConfigPath)) && File.Exists(configCandidate))
+            olympus.ConfigPath = configCandidate;
+
+        if (string.IsNullOrWhiteSpace(olympus.ExecutablePath) || !File.Exists(olympus.ExecutablePath))
+        {
+            var launcherCandidates = string.IsNullOrWhiteSpace(savedGamesRoot)
+                ? Array.Empty<string>()
+                : new[]
+                {
+                    Path.Combine(savedGamesRoot, "DCS Olympus", "frontend", "server.vbs"),
+                    Path.Combine(savedGamesRoot, "DCS Olympus", "frontend", "server", "server.vbs")
+                };
+            var launcher = launcherCandidates.FirstOrDefault(File.Exists);
+            if (launcher is not null) olympus.ExecutablePath = launcher;
+        }
+
+        if (string.IsNullOrWhiteSpace(olympus.ConfigPath) || !File.Exists(olympus.ConfigPath)) return;
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(olympus.ConfigPath));
+            if (!document.RootElement.TryGetProperty("frontend", out var frontend)
+                || !frontend.TryGetProperty("port", out var portValue)
+                || !portValue.TryGetInt32(out var port)
+                || port is < 1 or > 65535) return;
+            olympus.Port = port;
+            if (string.IsNullOrWhiteSpace(olympus.Url)
+                || string.Equals(olympus.Url, "http://127.0.0.1:3000", StringComparison.OrdinalIgnoreCase))
+                olympus.Url = $"http://127.0.0.1:{port}";
+        }
+        catch (JsonException) { }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 }

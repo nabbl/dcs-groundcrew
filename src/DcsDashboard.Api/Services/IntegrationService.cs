@@ -10,11 +10,15 @@ public sealed class IntegrationService
 {
     private readonly SettingsStore _store;
     private readonly DcsGrpcLiveService _grpc;
+    private readonly InteractiveProcessLauncher _launcher;
+    private readonly ILogger<IntegrationService> _logger;
     private readonly ConcurrentDictionary<string, RemoteProbe> _remoteProbes = new(StringComparer.OrdinalIgnoreCase);
-    public IntegrationService(SettingsStore store, DcsGrpcLiveService grpc)
+    public IntegrationService(SettingsStore store, DcsGrpcLiveService grpc, InteractiveProcessLauncher launcher, ILogger<IntegrationService> logger)
     {
         _store = store;
         _grpc = grpc;
+        _launcher = launcher;
+        _logger = logger;
     }
 
     public async Task<IReadOnlyList<IntegrationStatus>> GetStatusesAsync(CancellationToken cancellationToken = default)
@@ -128,10 +132,133 @@ public sealed class IntegrationService
             ?? throw new KeyNotFoundException($"Unknown integration '{id}'.");
         if (string.Equals(item.Id, "skyeye", StringComparison.OrdinalIgnoreCase) && item.Remote)
             throw new InvalidOperationException("Remote SkyEye instances cannot be started or restarted by Groundcrew.");
+        if (string.Equals(item.Id, "olympus", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!item.Enabled) throw new InvalidOperationException("Enable the Olympus integration before controlling it.");
+            if (action is "start") await StartOlympusAsync(item);
+            else if (action is "restart")
+            {
+                await StopOlympusAsync(item);
+                await StartOlympusAsync(item);
+            }
+            else await StopOlympusAsync(item);
+            return;
+        }
         if (string.IsNullOrWhiteSpace(item.ExecutablePath) || !File.Exists(item.ExecutablePath))
             throw new InvalidOperationException($"{item.Name} is not configured or installed.");
         var processes = Process.GetProcessesByName(Path.GetFileNameWithoutExtension(item.ExecutablePath));
         if (action is "stop" or "restart") foreach (var process in processes) { process.Kill(entireProcessTree: true); await process.WaitForExitAsync(); }
         if (action is "start" or "restart") Process.Start(new ProcessStartInfo(item.ExecutablePath, item.Arguments) { WorkingDirectory = Path.GetDirectoryName(item.ExecutablePath)!, UseShellExecute = false });
     }
+
+    public async Task StartConfiguredWithDcsAsync()
+    {
+        var settings = await _store.GetAsync();
+        var olympus = settings.Integrations.FirstOrDefault(item => string.Equals(item.Id, "olympus", StringComparison.OrdinalIgnoreCase));
+        if (olympus is null || !olympus.Enabled || !olympus.StartWithDcs) return;
+
+        try
+        {
+            if (IsPortListening(olympus.Port))
+            {
+                _logger.LogInformation("DCS Olympus is already listening on port {Port}; automatic launch was skipped.", olympus.Port);
+                return;
+            }
+
+            await StartOlympusAsync(olympus);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "DCS Olympus could not be started automatically. DCS startup will continue.");
+        }
+    }
+
+    private async Task StartOlympusAsync(IntegrationSettings item)
+    {
+        if (IsPortListening(item.Port)) return;
+        if (string.IsNullOrWhiteSpace(item.ExecutablePath) || !File.Exists(item.ExecutablePath))
+            throw new InvalidOperationException("The Olympus server launcher was not found. Select server.vbs in the Olympus configuration.");
+        if (string.IsNullOrWhiteSpace(item.ConfigPath) || !File.Exists(item.ConfigPath))
+            throw new InvalidOperationException("The Olympus instance configuration was not found. Select Config\\olympus.json in the Olympus configuration.");
+
+        var launcherPath = item.ExecutablePath;
+        var workingDirectory = Path.GetDirectoryName(launcherPath)!;
+        InteractiveLaunchResult launched;
+        if (string.Equals(Path.GetExtension(launcherPath), ".vbs", StringComparison.OrdinalIgnoreCase))
+        {
+            var cscript = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "cscript.exe");
+            if (!File.Exists(cscript)) cscript = "cscript.exe";
+            var arguments = $"//Nologo {QuoteArgument(launcherPath)} {QuoteArgument(item.ConfigPath)}";
+            launched = _launcher.Start(cscript, arguments, workingDirectory, "DCS Olympus");
+        }
+        else
+        {
+            launched = _launcher.Start(launcherPath, item.Arguments, workingDirectory, "DCS Olympus");
+        }
+
+        _logger.LogInformation(
+            "Started DCS Olympus launcher {ProcessId} in Windows session {SessionId}. Launcher: {Launcher}; config: {Config}",
+            launched.Process.Id,
+            launched.SessionId,
+            launcherPath,
+            item.ConfigPath);
+
+        for (var attempt = 0; attempt < 20 && !IsPortListening(item.Port); attempt++)
+            await Task.Delay(500);
+        if (!IsPortListening(item.Port))
+            _logger.LogWarning("DCS Olympus was launched but did not begin listening on port {Port} within 10 seconds.", item.Port);
+    }
+
+    private async Task StopOlympusAsync(IntegrationSettings item)
+    {
+        if (item.Port is not > 0) return;
+        var process = await FindNodeProcessOnPortAsync(item.Port.Value);
+        if (process is null)
+        {
+            if (IsPortListening(item.Port))
+                throw new InvalidOperationException($"Port {item.Port} is in use, but Groundcrew will not stop it because it is not an Olympus Node.js process.");
+            return;
+        }
+        process.Kill(entireProcessTree: true);
+        await process.WaitForExitAsync();
+        _logger.LogInformation("Stopped DCS Olympus Node.js process {ProcessId} on port {Port}.", process.Id, item.Port);
+    }
+
+    private static async Task<Process?> FindNodeProcessOnPortAsync(int port)
+    {
+        if (!OperatingSystem.IsWindows()) return null;
+        try
+        {
+            using var netstat = Process.Start(new ProcessStartInfo("netstat.exe", "-ano -p tcp")
+            {
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                CreateNoWindow = true
+            });
+            if (netstat is null) return null;
+            var output = await netstat.StandardOutput.ReadToEndAsync();
+            await netstat.WaitForExitAsync();
+            foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var columns = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+                if (columns.Length < 5 || !string.Equals(columns[3], "LISTENING", StringComparison.OrdinalIgnoreCase)) continue;
+                var separator = columns[1].LastIndexOf(':');
+                if (separator < 0 || !int.TryParse(columns[1][(separator + 1)..], out var localPort) || localPort != port) continue;
+                if (!int.TryParse(columns[4], out var processId)) continue;
+                var process = Process.GetProcessById(processId);
+                return string.Equals(process.ProcessName, "node", StringComparison.OrdinalIgnoreCase) ? process : null;
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    private static bool IsPortListening(int? port)
+    {
+        if (port is not > 0) return false;
+        try { return IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners().Any(endpoint => endpoint.Port == port.Value); }
+        catch { return false; }
+    }
+
+    private static string QuoteArgument(string value) => $"\"{value.Replace("\"", "\\\"")}\"";
 }
